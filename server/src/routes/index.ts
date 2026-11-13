@@ -1,5 +1,6 @@
 import {Router} from "express"
 import mongoose from 'mongoose'
+import authRoutes from './auth.routes'
 const router = Router();
 
 router.get("/health",(_req,res)=>{
@@ -10,6 +11,6 @@ router.get("/health",(_req,res)=>{
     });
 });
 
-
+router.use('/auth',authRoutes)
 
 export default router;
