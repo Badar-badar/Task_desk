@@ -8,7 +8,7 @@ import { AppError } from "../utils/appError";
 const slugify = (name: string): string =>
   name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "org";
 
-class OrganizationService {
+class OrganizationRepository {
   public async create(input: IOrganization.CreateObj, ownerId: Types.ObjectId): Promise<IOrganization.PersistenceModel> {
     const existingUser = await User.findOne({ _id: ownerId, organizationId: null });
 
@@ -146,4 +146,4 @@ class OrganizationService {
   }
 }
 
-export const organizationService = new OrganizationService();
+export const organizationRepository = new OrganizationRepository();

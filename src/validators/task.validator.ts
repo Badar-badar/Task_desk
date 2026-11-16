@@ -12,9 +12,7 @@ export const createTaskSchema = z.object({
   completedAt: z.coerce.date().optional(),
 }).strict();
 
-export const updateTaskSchema = createTaskSchema.partial().refine((data) => Object.keys(data).length > 0, {
-  message: "Provide at least one field to update",
-});
+export const updateTaskSchema = createTaskSchema.partial();
 
 export const projectTasksSchema = z.object({
   projectId: z.string().refine(mongoose.isValidObjectId, {

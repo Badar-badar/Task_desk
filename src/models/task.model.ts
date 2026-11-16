@@ -3,6 +3,28 @@ import { Schema, model } from "mongoose";
 import { ITask } from "../interfaces/iTask";
 import { TASK_STATUSES } from "./enums";
 
+const taskAttachmentSchema = new Schema<ITask.Attachment>(
+  {
+    key: {
+      type: String,
+      required: true,
+    },
+    fileName: {
+      type: String,
+      required: true,
+    },
+    mimeType: {
+      type: String,
+      required: true,
+    },
+    size: {
+      type: Number,
+      required: true,
+    },
+  },
+  { _id: true },
+);
+
 const taskSchema = new Schema<ITask.Model>(
   {
     organizationId: {
@@ -52,6 +74,11 @@ const taskSchema = new Schema<ITask.Model>(
       default: null,
     },
 
+    attachments: {
+      type: [taskAttachmentSchema],
+      default: [],
+    },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -62,6 +89,7 @@ const taskSchema = new Schema<ITask.Model>(
       type: Date,
       default: null,
     },
+    
   },
   {
     timestamps: true,

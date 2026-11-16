@@ -3,7 +3,10 @@ import type { IProject } from "../interfaces/iProject";
 import { ProjectModel } from "../models/project.model";
 import { AppError } from "../utils/appError";
 
-export const createProject = async (organizationId: Types.ObjectId, userId: Types.ObjectId, data: IProject.CreateObj) => {
+
+class ProjectRepository{
+
+public async createProject(organizationId: Types.ObjectId, userId: Types.ObjectId, data: IProject.CreateObj){
   const { dueDate, ...rest } = data;
   return ProjectModel.create({
     ...rest,
@@ -13,17 +16,17 @@ export const createProject = async (organizationId: Types.ObjectId, userId: Type
   });
 };
 
-export const listProjects = async (organizationId: Types.ObjectId) => {
+public async listProjects(organizationId: Types.ObjectId){
   return ProjectModel.find({ organizationId }).sort({ createdAt: -1 });
 };
 
-export const getProject = async (organizationId: Types.ObjectId, projectId: string) => {
+public async getProject(organizationId: Types.ObjectId, projectId: string){
   const project = await ProjectModel.findOne({ _id: projectId, organizationId });
   if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
   return project;
 };
 
-export const updateProject = async (organizationId: Types.ObjectId, projectId: string, data: IProject.UpdateObj) => {
+public async updateProject(organizationId: Types.ObjectId, projectId: string, data: IProject.UpdateObj) {
   const { dueDate, ...rest } = data;
   const changes = {
     ...rest,
@@ -42,8 +45,12 @@ export const updateProject = async (organizationId: Types.ObjectId, projectId: s
 
 
 
-export const deleteProject = async (organizationId: Types.ObjectId, projectId: string) => {
+public async deleteProject(organizationId: Types.ObjectId, projectId: string){
   const project = await ProjectModel.findOneAndDelete({ _id: projectId, organizationId });
   if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
   return project;
 };
+
+}
+
+export const projectRepository = new ProjectRepository();

@@ -3,6 +3,16 @@ import { Types } from "mongoose";
 import { TaskStatus } from "../models/enums";
 
 export namespace ITask {
+  export interface Attachment {
+    _id: Types.ObjectId;
+    key: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }
+
+  export type NewAttachment = Omit<Attachment, "_id">;
+
   export interface Model {
     _id: Types.ObjectId;
     organizationId: Types.ObjectId;
@@ -13,6 +23,7 @@ export namespace ITask {
     assigneeId?: Types.ObjectId | null;
     dueDate?: Date | null;
     completedAt?: Date | null;
+    attachments: Attachment[];
     createdBy: Types.ObjectId;
     deletedAt?: Date | null;
     createdAt: Date;

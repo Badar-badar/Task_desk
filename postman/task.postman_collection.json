@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "87f4cbb8-c7aa-4ac7-a23f-5dbde1a66d1b",
     "name": "Task Desk - Tasks",
-    "description": "Set token to a valid Firebase ID token for an owner/admin in an organization. Run the requests in order: Setup creates a test project and saves projectId; Create task saves taskId for Get, Update, and Delete.",
+    "description": "Set token to a valid Firebase ID token for an owner/admin in an organization. Run the requests in order: Setup creates a test project and saves projectId; Create task saves taskId. Upload supports up to 5 JPEG, PNG, WebP, or PDF files, 10 MB each.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -165,6 +165,114 @@
           ]
         },
         {
+          "name": "Create task with attachment",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Postman task with attachment",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Created with an attachment",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "todo",
+                  "type": "text"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a JPEG, PNG, WebP, or PDF file."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/task/project/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "task",
+                "project",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Choose a file in the files form-data field. The returned task ID is saved as taskId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Creates a task with an attachment', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.data.attachments).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(body.data.attachments[0].url).to.be.a('string').and.not.empty;",
+                  "  pm.collectionVariables.set('taskId', body.data._id || body.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload task attachment",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select an image or PDF. Repeat this field with the same key to upload multiple files."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/task/{{taskId}}/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "task",
+                "{{taskId}}",
+                "attachments"
+              ]
+            },
+            "description": "Run after Create task and select a file for the files form-data field. The response includes a signed URL valid for one hour."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Uploads a task attachment and returns its URL', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.data.attachments).to.be.an('array').that.is.not.empty;",
+                  "  pm.expect(body.data.attachments[body.data.attachments.length - 1].url).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Get created task (after Create task)",
           "request": {
             "method": "GET",
@@ -234,6 +342,56 @@
                   "  pm.expect(body.success).to.eql(true);",
                   "  pm.expect(body.data.title).to.eql('Updated Postman task');",
                   "  pm.expect(body.data.status).to.eql('in_progress');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update task with attachment",
+          "request": {
+            "method": "PATCH",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Updated task with attachment",
+                  "type": "text"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a JPEG, PNG, WebP, or PDF file."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/task/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "task",
+                "{{taskId}}"
+              ]
+            },
+            "description": "Choose a file in the files form-data field. Existing task fields can be updated in the same multipart request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Updates a task and adds an attachment', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.data.title).to.eql('Updated task with attachment');",
+                  "  pm.expect(body.data.attachments).to.be.an('array').that.is.not.empty;",
                   "});"
                 ]
               }
