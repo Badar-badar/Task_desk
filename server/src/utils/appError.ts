@@ -13,10 +13,3 @@ export class AppError extends Error {
     }
   }
 }
-
-export class ApiError extends AppError {
-  constructor(statusCode: number, message: string) {
-    super(statusCode, "API_ERROR", message);
-    this.name = "ApiError";
-  }
-}

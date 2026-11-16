@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import { ZodType } from "zod";
-import { ApiError } from "../utils/ApiError.js";
+import { AppError } from "../utils/appError";
 
 type Schemas = {
   body?: ZodType;
@@ -29,6 +29,6 @@ export const validate =
       }
     }
 
-    if (errors.length) return next(new ApiError(400, errors.join(", ")));
+    if (errors.length) return next(new AppError(400, "API_ERROR", errors.join(", ")));
     next();
   };
