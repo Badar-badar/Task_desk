@@ -42,7 +42,6 @@ const organizationSchema = new mongoose.Schema<IOrganization.PersistenceModel>(
 );
 
 organizationSchema.index({ ownerId: 1 });
-organizationSchema.index({ slug: 1 }, { unique: true });
 
 export const OrganizationModel = mongoose.model<IOrganization.PersistenceModel>(
   "Organization",

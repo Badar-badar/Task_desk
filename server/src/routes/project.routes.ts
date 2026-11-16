@@ -24,9 +24,9 @@ const projectRouter = express.Router();
 projectRouter.use(authenticate, orgContext);
 
 projectRouter.get("/", requireRole("owner", "admin"), getProjects);
-projectRouter.get("/:projectId", validate(projectIdSchema), getOne);
+projectRouter.get("/:projectId", validate({ params: projectIdSchema }), getOne);
 projectRouter.post("/", requireRole("owner", "admin"), validate(createProjectSchema), create);
-projectRouter.patch("/:projectId", requireRole("owner", "admin"), validate(updateProjectSchema), update);
-projectRouter.delete("/:projectId", requireRole("owner", "admin"), validate(projectIdSchema), remove);
+projectRouter.patch("/:projectId",requireRole("owner", "admin"), validate({ body: updateProjectSchema, params: projectIdSchema }),update,);
+projectRouter.delete("/:projectId", requireRole("owner", "admin"), validate({ params: projectIdSchema }), remove);
 
 export default projectRouter;
