@@ -1,61 +1,49 @@
-import { Types } from "mongoose";
-import { CreateProjectInput, UpdateProjectInput } from "../validators/project.validator";
-import { Project } from "../models/project.model";
-import { ApiError } from "../utils/ApiError";
+import type { Types } from "mongoose";
+import type { IProject } from "../interfaces/iProject";
+import { ProjectModel } from "../models/project.model";
+import { AppError } from "../utils/appError";
 
-export const createProject = async(orgId:Types.ObjectId, userId:Types.ObjectId, data: CreateProjectInput) =>{
-     const { dueDate, ...rest } = data;
-
-  const project = await Project.create({
+export const createProject = async (organizationId: Types.ObjectId, userId: Types.ObjectId, data: IProject.CreateObj) => {
+  const { dueDate, ...rest } = data;
+  return ProjectModel.create({
     ...rest,
-    ...(dueDate !== undefined && { endDate: dueDate }),
-    organizationId: orgId,
+    ...(dueDate !== undefined ? { endDate: dueDate } : {}),
+    organizationId,
     createdBy: userId,
-  });    
-     return project;
-}
-
-export const listProjects = async(orgId:Types.ObjectId) =>{
-     const projects = await Project.find({organizationId: orgId});
-     if(!projects){
-        throw new ApiError(409,"Projects not found");
-     }
-     return projects;
-}
-export const getProject = async (orgId: Types.ObjectId, projectId: string) => {
-  const project = await Project.findOne({
-    _id: projectId,
-    organizationId: orgId,
   });
-  if (!project) throw new ApiError(404, "Project not found");
+};
+
+export const listProjects = async (organizationId: Types.ObjectId) => {
+  return ProjectModel.find({ organizationId }).sort({ createdAt: -1 });
+};
+
+export const getProject = async (organizationId: Types.ObjectId, projectId: string) => {
+  const project = await ProjectModel.findOne({ _id: projectId, organizationId });
+  if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
   return project;
 };
 
-export const updateProject = async (orgId: Types.ObjectId,projectId: string,data: UpdateProjectInput) => {
+export const updateProject = async (organizationId: Types.ObjectId, projectId: string, data: IProject.UpdateObj) => {
   const { dueDate, ...rest } = data;
   const changes = {
     ...rest,
-    ...(dueDate !== undefined && { endDate: dueDate }),
+    ...(dueDate !== undefined ? { endDate: dueDate } : {}),
   };
 
-  const project = await Project.findOneAndUpdate(
-    { _id: projectId, organizationId: orgId },
+  const project = await ProjectModel.findOneAndUpdate(
+    { _id: projectId, organizationId },
     { $set: changes },
-    { new: true}
+    { new: true, runValidators: true }
   );
-  if (!project) throw new ApiError(404, "Project not found");
+  if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+
   return project;
 };
 
 
-export const deleteProject = async (orgId: Types.ObjectId, projectId: string) => {
-  const project = await Project.findOneAndDelete({
-    _id: projectId,
-    organizationId: orgId,
-  });
-  if (!project) throw new ApiError(404, "Project not found");
 
-//   await Task.deleteMany({ projectId: project._id, organizationId: orgId });
-
+export const deleteProject = async (organizationId: Types.ObjectId, projectId: string) => {
+  const project = await ProjectModel.findOneAndDelete({ _id: projectId, organizationId });
+  if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
   return project;
 };

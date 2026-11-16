@@ -6,6 +6,7 @@ export interface IUser{
     firebaseUid:string,
     name:string,
     email:string,
+    avatarUrl?: string | null,
     organizationId:Types.ObjectId | null,
     role:OrgRole | null,
     isActive:boolean,

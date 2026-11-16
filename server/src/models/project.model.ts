@@ -1,59 +1,57 @@
-import { Schema, model, Types } from 'mongoose';
-import { PROJECT_STATUSES, ProjectStatus } from './enums';
 
-export interface IProject {
-  _id: Types.ObjectId;
-  organizationId: Types.ObjectId;
-  name: string;
-  description?: string;
-  status: ProjectStatus;
-  startDate?: Date;
-  endDate?: Date;
-  createdBy: Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import mongoose from "mongoose";
+import type { IProject } from "../interfaces/iProject";
+import { PROJECT_STATUSES } from "./enums";
 
-
-
-const projectSchema = new Schema<IProject>(
+const projectSchema = new mongoose.Schema<IProject.Model>(
   {
-    organizationId: { 
-        type: Schema.Types.ObjectId, 
-        ref: 'Organization', 
-        required: true 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
     },
-    name: { 
-        type: String, 
-        required: true, 
-        trim: true, 
-        maxlength: 150 
+
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
     },
-    description: { 
-        type: String, 
-        maxlength: 1000 
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
     },
-    status: { 
-        type: String, 
-        enum: PROJECT_STATUSES, 
-        default: 'active' 
+
+    status: {
+      type: String,
+      enum: PROJECT_STATUSES,
+      default: "active",
     },
-    startDate: { 
-        type: Date 
+
+    startDate: {
+      type: Date,
     },
-    endDate: { 
-        type: Date 
+
+    endDate: {
+      type: Date,
     },
-    createdBy: { 
-        type: Schema.Types.ObjectId, 
-        ref: 'User', 
-        required: true 
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
   },
-  { 
-    timestamps: true 
-  }
+  {
+    timestamps: true,
+  },
 );
 
+projectSchema.index({ organizationId: 1 });
 
-export const Project = model<IProject>('Project', projectSchema);
+export const ProjectModel = mongoose.model<IProject.Model>(
+  "Project",
+  projectSchema,
+);

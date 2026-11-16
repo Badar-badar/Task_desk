@@ -1,46 +1,88 @@
-import { z } from 'zod';
-import { ASSIGNABLE_ROLES } from '../models/enums';
-import { userIdParams } from './common';
+
+import type { RequestHandler } from "express";
+import mongoose from "mongoose";
+import { z } from "zod";
+import { AppError } from "../utils/appError";
+import { ASSIGNABLE_ROLES } from "../models/enums";
+
+const createOrganizationSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    description: z.string().trim().max(500).optional(),
+  }).strict();
+
+const updateOrganizationSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120).optional(),
+    description: z.string().trim().max(500).optional(),
+  }).strict().refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update",
+  });
 
 
-const orgFields = z.object({
-  name: z
-    .string({ error: 'Name is required' })
-    .trim()
-    .min(2, 'Name must be at least 2 characters')
-    .max(120, 'Name must be at most 120 characters'),
-  description: z.string().trim().max(500, 'Description must be at most 500 characters').optional(),
+const addMemberSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email(),
+    role: z.enum(ASSIGNABLE_ROLES).default("employee"),
+  }).strict();
+
+const changeRoleSchema = z
+  .object({
+    role: z.enum(ASSIGNABLE_ROLES),
+  }).strict();
+
+  
+const memberIdParamsSchema = z.object({
+  userId: z.string().refine(mongoose.isValidObjectId, {
+    message: "Invalid userId",
+  }),
 });
 
-const createBody = orgFields;
+const validateBody = (schema: z.ZodType): RequestHandler => {
+  return (request, _response, next) => {
+    const result = schema.safeParse(request.body);
 
-const updateBody = orgFields
-  .partial()
-  .refine((data) => Object.keys(data).length > 0, 'Provide at least one field to update');
+    if (!result.success) {
+      next(
+        new AppError(
+          400,
+          "VALIDATION_ERROR",
+          result.error.message,
+        ),
+      );
+      return;
+    }
 
-const addMemberBody = z.object({
-  email: z
-    .string({ error: 'Email is required' })
-    .trim()
-    .toLowerCase()
-    .email('Invalid email address'),
-  role: z.enum(ASSIGNABLE_ROLES, { error: 'Role must be admin, employee' }).default('employee'),
-});
+    request.body = result.data;
+    next();
+  };
+};
 
-const changeRoleBody = z.object({
-    role : z.enum(ASSIGNABLE_ROLES, {error : "Role must be admin or employee"})
-});
+const validateParams = (schema: z.ZodType): RequestHandler => {
+  return (request, _response, next) => {
+    const result = schema.safeParse(request.params);
 
+    if (!result.success) {
+      next(
+        new AppError(
+          400,
+          "VALIDATION_ERROR",
+          result.error.message,
+        ),
+      );
+      return;
+    }
 
+    next();
+  };
+};
 
-export const createOrgSchema = { body: createBody };
-export const updateOrgSchema = { body: updateBody };
-export const addMemberSchema = { body: addMemberBody };
-export const memberIdSchema = { params: userIdParams };
-export const changeRoleSchema = {body:changeRoleBody}
+const organizationValidator = {
+  create: validateBody(createOrganizationSchema),
+  update: validateBody(updateOrganizationSchema),
+  addMember: validateBody(addMemberSchema),
+  changeRole: validateBody(changeRoleSchema),
+  memberIdParams: validateParams(memberIdParamsSchema),
+};
 
-
-export type CreateOrgInput = z.infer<typeof createBody>;
-export type UpdateOrgInput = z.infer<typeof updateBody>;
-export type AddMemberInput = z.infer<typeof addMemberBody>;
-export type ChangeRoleInput = z.infer<typeof changeRoleBody>
+export default organizationValidator;

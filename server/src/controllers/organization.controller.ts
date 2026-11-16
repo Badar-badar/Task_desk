@@ -1,48 +1,64 @@
-import {Request, Response} from 'express'
-import { CreateOrgInput, UpdateOrgInput, ChangeRoleInput } from '../validators/organization.validator'
-import {createOrganization, updateOrganization, deleteOrganization, listMembers,addMember, changeMemberRole,removeOrgMember} from '../services/organization.service'
 
+import type { Request, Response } from "express";
+import type { IOrganization } from "../interfaces/iOrganization";
+import type { OrgRole } from "../models/enums";
+import { organizationService } from "../services/organization.service";
 
-export const create = async(req:Request, res:Response)=>{
-    const org = await createOrganization(req.user!, req.body as CreateOrgInput);
-    res.status(201).json({success:true, organization: org})
-}
+export const organizationController = {
+  async create(request: Request, response: Response): Promise<void> {
+    const user = request.user!;
+    const organization = await organizationService.create(request.body as IOrganization.CreateObj, user._id,);
 
-export const getMine = async(req:Request, res:Response)=>{
-    res.status(201).json({success:true, Organization: req.organization, role: req.user!.role})
-}
+    response.status(201).json({success: true,data: organization,});
+  },
 
+  async getMine(request: Request, response: Response): Promise<void> {
+    const organization = await organizationService.findMine(request.user!._id,);
 
-export const update = async(req:Request, res:Response)=>{
-    const org = await updateOrganization(req.organization!._id, req.body as UpdateOrgInput);
-    res.status(201).json({success:true, organization: org})
-}
+    response.status(200).json({success: true,
+      data: {
+        organization,
+        role: request.user!.role,
+      },
+    });
+  },
 
-export const remove = async(req:Request, res:Response)=>{
-     deleteOrganization(req.organization!._id);
-    res.status(201).send();
-}
+  async update(request: Request, response: Response): Promise<void> {
+    const organization = await organizationService.updateById(request.organization!._id,request.body as IOrganization.UpdateObj,);
 
-export const getMembers = async(req:Request, res:Response)=>{
-    const mem = await listMembers(req.organization!._id);
-    res.status(201).json({success:true, member: mem})
-}
+    response.status(200).json({ success: true,data: organization,});
+  },
 
-export const addNewMember = async(req:Request, res:Response)=>{
-    const {email, role} = req.body;
-    const mem = await addMember(req.organization!._id,email, role);
-    res.status(201).json({success:true, member: mem})
-}
+  async remove(request: Request, response: Response): Promise<void> {
+    await organizationService.deleteById(request.organization!._id,);
 
-export const changeRole = async(req:Request, res:Response)=>{
-    const {role} = req.body as ChangeRoleInput;
-    const memRole = await changeMemberRole(req.organization!._id,req.user!.role!,req.params.userId as string, role);
-    res.status(201).json({success:true, member: memRole})
-}
+    response.status(200).json({success: true,message: "Organization deleted successfully",});
+  },
 
-export const removeMember = async(req:Request, res:Response)=>{
-    await removeOrgMember(req.organization!._id,req.user!._id,req.user!.role!,req.params.userId as string);
-    res.status(201).send()
-}
+  async getMembers(request: Request, response: Response): Promise<void> {
+    const members = await organizationService.findMembers(request.organization!._id,);
 
+    response.status(200).json({success: true,data: members});
+  },
 
+  async addMember(request: Request, response: Response): Promise<void> {
+    const member = await organizationService.addMember(request.organization!._id, request.body as IOrganization.AddMemberObj,);
+
+    response.status(201).json({success: true, data: member});
+  },
+
+  async changeRole(request: Request, response: Response): Promise<void> {
+    const input = request.body as IOrganization.ChangeRoleObj;
+
+    const member = await organizationService.changeMemberRole(request.organization!._id,request.user!.role as OrgRole, request.params.userId as string,input.role,);
+
+    response.status(200).json({success: true, data: member,});
+  },
+
+ 
+  async removeMember(request: Request, response: Response): Promise<void> {
+    await organizationService.removeMember(request.organization!._id,request.user!._id,request.user!.role as OrgRole,request.params.userId as string,);
+
+    response.status(200).json({success: true,message: "Member removed successfully"});
+  },
+};

@@ -1,106 +1,149 @@
-import { Types } from 'mongoose';
-import { CreateOrgInput, UpdateOrgInput } from '../validators/organization.validator';
-import {Organization} from '../models/organization.model';
-import { OrgRole } from '../models/enums';
-import { User } from '../models/user.model';
-import { ApiError } from '../utils/ApiError';
+import { Types } from "mongoose";
+import type { IOrganization } from "../interfaces/iOrganization";
+import { OrganizationModel } from "../models/organization.model";
+import { User } from "../models/user.model";
+import type { OrgRole } from "../models/enums";
+import { AppError } from "../utils/appError";
 
-const slugify = (name: string) =>name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'org';
+const slugify = (name: string): string =>
+  name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "org";
 
-export const createOrganization = async ( user: { _id: Types.ObjectId; organizationId: Types.ObjectId | null },data: CreateOrgInput) => {
-  if (user.organizationId) throw new ApiError(409, 'You already belong to an organization');
+class OrganizationService {
+  public async create(input: IOrganization.CreateObj, ownerId: Types.ObjectId): Promise<IOrganization.PersistenceModel> {
+    const existingUser = await User.findOne({ _id: ownerId, organizationId: null });
 
-  const slug = `${slugify(data.name)}-${Math.random().toString(36).slice(2, 6)}`;
-  const { description, ...rest } = data;
-  const organization = await Organization.create({
-    ...rest,
-    ...(description !== undefined ? { description } : {}),
-    slug,
-    ownerId: user._id,
-  });
+    if (!existingUser) throw new AppError(409, "ORGANIZATION_ALREADY_EXISTS", "You already belong to an organization");
 
+    const slug = `${slugify(input.name)}-${new Types.ObjectId().toString().slice(-6)}`;
 
-  const updated = await User.findOneAndUpdate(
-    { _id: user._id, organizationId: null },
-    { organizationId: organization._id, role: 'owner' },
-    { new: true }
-  );
-  if (!updated) {
-    await Organization.deleteOne({ _id: organization._id }); // roll back
-    throw new ApiError(409, 'You already belong to an organization');
-  }
-  return organization;
-};
+    const organization = await OrganizationModel.create({
+      name: input.name,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      slug,
+      ownerId,
+    });
 
-export const updateOrganization = async (orgId: Types.ObjectId, data: UpdateOrgInput) => {
-  const { name, description } = data;
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: ownerId, organizationId: null },
+      { $set: { organizationId: organization._id, role: "owner" } },
+      { new: true }
+    );
 
-  const update: { name?: string; description?: string } = {};
+    if (!updatedUser) {
+      await OrganizationModel.deleteOne({ _id: organization._id });
+      throw new AppError(409, "ORGANIZATION_ALREADY_EXISTS", "You already belong to an organization");
+    }
 
-  if (name !== undefined){
-    update.name = name;
-  } 
-  if (description !== undefined) update.description = description;
-
-  return Organization.findOneAndUpdate({ _id: orgId, deletedAt: null }, update, { new: true });
-};
-
-export const deleteOrganization = async (orgId: Types.ObjectId) => {
-  const now = new Date();
-  
-};
-
-
-export const listMembers = async (orgId: Types.ObjectId) =>
-  User.find({ organizationId: orgId }).select('name email role createdAt');
-
-
-
-export const addMember = async (orgId: Types.ObjectId, email: string, role: OrgRole) => {
-  const user = await User.findOne({ email });
-  if (!user) throw new ApiError(404, 'No OrgFlow user with this email. They must sign up first');
-
-
-  const updated = await User.findOneAndUpdate(
-    { _id: user._id, organizationId: null },
-    { organizationId: orgId, role },
-    { new: true }
-  ).select('name email avatarUrl role');
-  if (!updated) throw new ApiError(409, 'This user already belongs to an organization');
-
-  return updated;
-};
-
-export const changeMemberRole = async (orgId: Types.ObjectId, oldRole: OrgRole, targetUserId: string,newRole: OrgRole) => {
-  const target = await User.findOne({ _id: targetUserId, organizationId: orgId });
-  if (!target) throw new ApiError(404, 'Member not found');
-  if (target.role === 'owner') throw new ApiError(403, 'The owner role cannot be changed');
-  if (oldRole === 'admin' && (target.role === 'admin' || newRole === 'admin')) {
-    throw new ApiError(403, 'Only the owner can manage admins');
+    return organization.toObject();
   }
 
-  target.role = newRole;
-  await target.save();
-  return { _id: target._id, name: target.name, email: target.email, role: target.role };
-};
+  public async findMine(userId: Types.ObjectId): Promise<IOrganization.PersistenceModel> {
+    const user = await User.findById(userId).select("organizationId");
 
-export const removeOrgMember = async(orgId:Types.ObjectId,actorId:Types.ObjectId,actorRole:OrgRole,targetUserId:string) =>{
-    const target = await User.findOne({_id:targetUserId, organizationId:orgId});
-    if(!target){
-      throw new ApiError(404,'Member not found');
+    if (!user?.organizationId) throw new AppError(404, "ORGANIZATION_NOT_FOUND", "You do not belong to an organization");
+
+    const organization = await OrganizationModel.findOne({ _id: user.organizationId, deletedAt: null }).lean();
+
+    if (!organization) throw new AppError(404, "ORGANIZATION_NOT_FOUND", "Organization not found");
+
+    return organization as IOrganization.PersistenceModel;
+  }
+
+
+  public async updateById(organizationId: Types.ObjectId, input: IOrganization.UpdateObj): Promise<IOrganization.PersistenceModel> {
+    const organization = await OrganizationModel.findOneAndUpdate(
+      { _id: organizationId, deletedAt: null },
+      { $set: input },
+      { new: true, runValidators: true }
+    ).lean();
+
+    if (!organization) throw new AppError(404, "ORGANIZATION_NOT_FOUND", "Organization not found");
+
+    return organization as IOrganization.PersistenceModel;
+  }
+
+  public async deleteById(organizationId: Types.ObjectId): Promise<void> {
+    const organization = await OrganizationModel.findOneAndUpdate(
+      { _id: organizationId, deletedAt: null },
+      { $set: { deletedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!organization) throw new AppError(404, "ORGANIZATION_NOT_FOUND", "Organization not found");
+
+    await User.updateMany(
+      { organizationId },
+      { $set: { organizationId: null, role: null } }
+    );
+  }
+
+
+
+  public async findMembers(organizationId: Types.ObjectId): Promise<IOrganization.Member[]> {
+    return User.find({ organizationId })
+      .select("name email avatarUrl role createdAt")
+      .lean<IOrganization.Member[]>();
+  }
+
+  public async addMember(organizationId: Types.ObjectId, input: IOrganization.AddMemberObj): Promise<IOrganization.Member> {
+    const user = await User.findOne({ email: input.email });
+
+    if (!user) throw new AppError(404, "USER_NOT_FOUND", "User must sign up before joining an organization");
+
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: user._id, organizationId: null },
+      { $set: { organizationId, role: input.role } },
+      { new: true }
+    ).select("name email avatarUrl role createdAt");
+
+    if (!updatedUser) throw new AppError(409, "USER_ALREADY_ASSIGNED", "This user already belongs to an organization");
+
+    return updatedUser.toObject() as IOrganization.Member;
+  }
+
+
+
+  public async changeMemberRole(organizationId: Types.ObjectId,actorRole: OrgRole,targetUserId: string,newRole: OrgRole): Promise<IOrganization.Member> {
+    const target = await User.findOne({ _id: targetUserId, organizationId });
+
+    if (!target) throw new AppError(404, "MEMBER_NOT_FOUND", "Member not found");
+
+    if (target.role === "owner") throw new AppError(403, "OWNER_ROLE_PROTECTED", "Owner role cannot be changed");
+
+    if (actorRole === "admin" && (target.role === "admin" || newRole === "admin")) {
+      throw new AppError(403, "ADMIN_PERMISSION_DENIED", "Only the owner can manage admins");
     }
-    if(target.role === 'owner'){
-      throw new ApiError(401,'owner can not be removed')
-    }
+
+    target.role = newRole;
+    await target.save();
+
+    return {
+      _id: target._id,
+      name: target.name,
+      email: target.email,
+      avatarUrl: target.avatarUrl ?? undefined,
+      role: target.role,
+      createdAt: target.createdAt,
+    };
+  }
+
+  public async removeMember(organizationId: Types.ObjectId,actorId: Types.ObjectId,actorRole: OrgRole,targetUserId: string): Promise<void> {
+    const target = await User.findOne({ _id: targetUserId, organizationId });
+
+    if (!target) throw new AppError(404, "MEMBER_NOT_FOUND", "Member not found");
+
+    if (target.role === "owner") throw new AppError(403, "OWNER_CANNOT_BE_REMOVED", "Organization owner cannot be removed");
 
     const isSelf = target._id.equals(actorId);
-    if (!isSelf && actorRole === 'admin' && target.role === 'admin') {
-      throw new ApiError(403, 'Only the owner can remove admins');
+
+    if (!isSelf && actorRole === "admin" && target.role === "admin") {
+      throw new AppError(403, "ADMIN_PERMISSION_DENIED", "Only the owner can remove admins");
     }
-    
+
     target.organizationId = null;
     target.role = null;
     await target.save();
-
+  }
 }
 
+export const organizationService = new OrganizationService();

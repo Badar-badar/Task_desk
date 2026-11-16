@@ -1,14 +1,14 @@
-import { DecodedIdToken } from "firebase-admin/auth";
-import { HydratedDocument } from "mongoose";
-import { IUser } from "../models/user.model.js";
-import { IOrganization } from "../models/organization.model.js";
+import type { DecodedIdToken } from "firebase-admin/auth";
+import type { HydratedDocument } from "mongoose";
+import type { IUser } from "../models/user.model";
+import type { IOrganization } from "../interfaces/iOrganization";
 
 declare global {
   namespace Express {
     interface Request {
       firebaseUser?: DecodedIdToken;
       user?: HydratedDocument<IUser>;
-      organization?: HydratedDocument<IOrganization>;
+      organization?: HydratedDocument<IOrganization.Model>;
     }
   }
 }

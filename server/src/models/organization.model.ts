@@ -1,47 +1,50 @@
-import { Schema, model, Types } from 'mongoose';
 
-export interface IOrganization {
-  _id: Types.ObjectId;
-  name: string;
-  slug: string;
-  description?: string;
-  ownerId: Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import mongoose from "mongoose";
+import type { IOrganization } from "../interfaces/iOrganization";
 
-
-
-const organizationSchema = new Schema<IOrganization>(
+const organizationSchema = new mongoose.Schema<IOrganization.PersistenceModel>(
   {
     name: {
-         type: String,
-         required: true,
-         trim: true,
-         maxlength: 120 
-        },
-    slug: { 
-        type: String, 
-        required: true, 
-        unique: true, 
-        lowercase: true, 
-        trim: true 
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
     },
 
-    description: { 
-        type:  String, 
-        maxlength: 500 
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
     },
-    ownerId: { 
-        type: Schema.Types.ObjectId, 
-        ref: 'User', 
-        required: true 
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
     },
   },
-  { 
-    timestamps: true 
-
-  }
+  {
+    timestamps: true,
+  },
 );
 
-export const Organization = model<IOrganization>('Organization', organizationSchema);
+organizationSchema.index({ ownerId: 1 });
+organizationSchema.index({ slug: 1 }, { unique: true });
+
+export const OrganizationModel = mongoose.model<IOrganization.PersistenceModel>(
+  "Organization",
+  organizationSchema,
+);
