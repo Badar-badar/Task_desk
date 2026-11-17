@@ -29,7 +29,7 @@ export const loadUser = asyncHandler(async (req, _res, next) => {
   const user = await User.findOne({ firebaseUid: req.firebaseUser!.uid });
 
   if (!user) {
-    throw new AppError(401, "API_ERROR", "User not registered. Call /api/auth/sync first");
+    throw new AppError(401, "API_ERROR", "Call /api/v1/auth/sync first");
   }
   if (!user.isActive) {
     throw new AppError(403, "API_ERROR", "User is deactivated. Please request activation");

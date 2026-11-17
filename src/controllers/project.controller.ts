@@ -2,6 +2,7 @@
 import type { Request, Response } from "express";
 import type { IProject } from "../interfaces/iProject";
 import { projectRepository} from "../repositories/project.repository";
+import { deleteFile } from "../services/storage.service";
 
 
 export const create = async (req: Request, res: Response) => {
@@ -28,7 +29,15 @@ export const update = async (req: Request, res: Response) => {
 };
 
 export const remove = async (req: Request, res: Response) => {
-  await projectRepository.deleteProject(req.organization!._id,req.params.projectId as string);
+  const { tasks } = await projectRepository.deleteProject(
+    req.organization!._id,
+    req.params.projectId as string,
+  );
+  for (const task of tasks) {
+    for (const attachment of task.attachments) {
+      await deleteFile(attachment.key);
+    }
+  }
 
   res.status(200).json({success: true,message: "Project deleted successfully"});
 };

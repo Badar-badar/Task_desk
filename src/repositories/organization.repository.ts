@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import type { IOrganization } from "../interfaces/iOrganization";
 import { OrganizationModel } from "../models/organization.model";
 import { User } from "../models/user.model";
+import { Task } from "../models/task.model";
 import type { OrgRole } from "../models/enums";
 import { AppError } from "../utils/appError";
 
@@ -143,6 +144,10 @@ class OrganizationRepository {
     target.organizationId = null;
     target.role = null;
     await target.save();
+    await Task.updateMany(
+      { organizationId, assigneeId: target._id },
+      { $set: { assigneeId: null } },
+    );
   }
 }
 

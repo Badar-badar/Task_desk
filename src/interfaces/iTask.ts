@@ -1,6 +1,6 @@
 
 import { Types } from "mongoose";
-import { TaskStatus } from "../models/enums";
+import { TaskPriority, TaskStatus } from "../models/enums";
 
 export namespace ITask {
   export interface Attachment {
@@ -20,6 +20,7 @@ export namespace ITask {
     title: string;
     description?: string;
     status: TaskStatus;
+    priority: TaskPriority;
     assigneeId?: Types.ObjectId | null;
     dueDate?: Date | null;
     completedAt?: Date | null;
@@ -34,15 +35,17 @@ export namespace ITask {
     title: string;
     description?: string;
     status?: TaskStatus;
-    dueDate?: Date;
-    completedAt?: Date;
+    priority?: TaskPriority;
+    assigneeId?: string | Types.ObjectId | null;
+    dueDate?: Date | null;
   }
 
   export interface UpdateObj {
     title?: string;
     description?: string;
     status?: TaskStatus;
-    dueDate?: Date;
-    completedAt?: Date;
+    priority?: TaskPriority;
+    assigneeId?: string | Types.ObjectId | null;
+    dueDate?: Date | null;
   }
 }

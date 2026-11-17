@@ -14,7 +14,7 @@ organizationRouter.use(orgContext);
 organizationRouter.get("/", organizationController.getMine);
 organizationRouter.patch("/", requireRole("owner", "admin"), organizationValidator.update, organizationController.update);
 organizationRouter.delete("/", requireRole("owner"), organizationController.remove);
-organizationRouter.get("/members", requireRole("owner", "admin"), organizationController.getMembers);
+organizationRouter.get("/members", organizationController.getMembers);
 organizationRouter.post("/members", requireRole("owner", "admin"), organizationValidator.addMember, organizationController.addMember);
 organizationRouter.patch("/members/:userId", requireRole("owner", "admin"), organizationValidator.memberIdParams, organizationValidator.changeRole, organizationController.changeRole);
 organizationRouter.delete("/members/:userId", requireRole("owner", "admin"), organizationValidator.memberIdParams, organizationController.removeMember);

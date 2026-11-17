@@ -27,6 +27,6 @@ export const errorHandler = async (
   res.status(statusCode).json({
     success: false,
     message,
-    ...(process.env.NODE_ENV !== "prodution" && { stack: err.stack }),
+    ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
   });
 };

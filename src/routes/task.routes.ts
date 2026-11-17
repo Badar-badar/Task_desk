@@ -5,12 +5,20 @@ import { orgContext } from "../middlewares/orgContext";
 import { requireRole } from "../middlewares/rbac";
 import { upload } from "../middlewares/upload.middleware";
 import { validate } from "../middlewares/validate";
-import { createTaskSchema, taskIdSchema, updateTaskSchema, projectTasksSchema } from "../validators/task.validator";
+import {
+  createTaskSchema,
+  projectTasksSchema,
+  taskAttachmentIdSchema,
+  taskIdSchema,
+  taskListQuerySchema,
+  updateTaskSchema,
+} from "../validators/task.validator";
 
 const taskRouter = Router();
 
 taskRouter.use(authenticate, orgContext);
 
+taskRouter.get("/", validate({ query: taskListQuerySchema }), taskController.listOrganizationTasks);
 taskRouter.get("/project/:projectId", validate({ params: projectTasksSchema }), taskController.listTasks);
 taskRouter.post(
   "/project/:projectId",
@@ -22,17 +30,23 @@ taskRouter.post(
 );
 taskRouter.post(
   "/:taskId/attachments",
-  requireRole("owner", "admin"),
   validate({ params: taskIdSchema }),
+  taskController.authorizeTaskAccess,
   upload.array("files", 5),
   taskController.addTaskAttachments,
+);
+taskRouter.delete(
+  "/:taskId/attachments/:attachmentId",
+  validate({ params: taskAttachmentIdSchema }),
+  taskController.deleteTaskAttachment,
 );
 taskRouter.get("/:taskId", validate({ params: taskIdSchema }), taskController.getTask);
 taskRouter.patch(
   "/:taskId",
-  requireRole("owner", "admin"),
   validate({ params: taskIdSchema }),
+  taskController.authorizeTaskAccess,
   upload.array("files", 5),
+  taskController.enforceEmployeeStatusOnly,
   validate({ body: updateTaskSchema }),
   taskController.updateTask,
 );

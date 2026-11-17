@@ -2,17 +2,32 @@ import type { RequestHandler } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { AppError } from "../utils/appError";
-import { TASK_STATUSES } from "../models/enums";
+import { TASK_PRIORITIES, TASK_STATUSES } from "../models/enums";
 
-export const createTaskSchema = z.object({
+const assigneeIdSchema = z.preprocess(
+  (value) => value === "" || value === "null" ? null : value,
+  z.union([
+    z.string(),
+    z.null(),
+  ]),
+);
+
+const taskBodySchema = z.object({
   title: z.string({ error: "Title is required" }).trim().min(2, "Title must be at least 2 characters").max(120, "Title cannot exceed 120 characters"),
   description: z.string().trim().max(1000, "Description cannot exceed 1000 characters").optional(),
   status: z.enum(TASK_STATUSES).optional(),
-  dueDate: z.coerce.date().optional(),
-  completedAt: z.coerce.date().optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  assigneeId: assigneeIdSchema.optional(),
+  dueDate: z.coerce.date().nullable().optional(),
+  completedAt: z.unknown().optional(),
 }).strict();
 
-export const updateTaskSchema = createTaskSchema.partial();
+export const createTaskSchema = taskBodySchema.transform(({ completedAt: _completedAt, ...data }) => data);
+
+export const updateTaskSchema = taskBodySchema.partial().transform(({ completedAt: _completedAt, ...data }) => data)
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update",
+  });
 
 export const projectTasksSchema = z.object({
   projectId: z.string().refine(mongoose.isValidObjectId, {
@@ -25,6 +40,24 @@ export const taskIdSchema = z.object({
     message: "Invalid task ID",
   }),
 });
+
+export const taskAttachmentIdSchema = z.object({
+  taskId: z.string().refine(mongoose.isValidObjectId, {
+    message: "Invalid task ID",
+  }),
+  attachmentId: z.string().refine(mongoose.isValidObjectId, {
+    message: "Invalid attachment ID",
+  }),
+});
+
+export const taskListQuerySchema = z.object({
+  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID").optional(),
+  assigneeId: z.union([
+    z.literal("me"),
+    z.string().refine(mongoose.isValidObjectId, "Invalid assignee ID"),
+  ]).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
+}).strict();
 
 const validateBody = (schema: z.ZodType): RequestHandler => {
   return (request, _response, next) => {

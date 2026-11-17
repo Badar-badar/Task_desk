@@ -1,7 +1,7 @@
 
 import { Schema, model } from "mongoose";
 import { ITask } from "../interfaces/iTask";
-import { TASK_STATUSES } from "./enums";
+import { TASK_PRIORITIES, TASK_STATUSES } from "./enums";
 
 const taskAttachmentSchema = new Schema<ITask.Attachment>(
   {
@@ -56,6 +56,12 @@ const taskSchema = new Schema<ITask.Model>(
       type: String,
       enum: TASK_STATUSES,
       default: "todo",
+    },
+
+    priority: {
+      type: String,
+      enum: TASK_PRIORITIES,
+      default: "medium",
     },
 
     assigneeId: {

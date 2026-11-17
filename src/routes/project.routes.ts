@@ -23,7 +23,7 @@ const projectRouter = express.Router();
 
 projectRouter.use(authenticate, orgContext);
 
-projectRouter.get("/", requireRole("owner", "admin"), getProjects);
+projectRouter.get("/", getProjects);
 projectRouter.get("/:projectId", validate({ params: projectIdSchema }), getOne);
 projectRouter.post("/", requireRole("owner", "admin"), validate(createProjectSchema), create);
 projectRouter.patch("/:projectId",requireRole("owner", "admin"), validate({ body: updateProjectSchema, params: projectIdSchema }),update,);

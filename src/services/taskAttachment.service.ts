@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { ITask } from "../interfaces/iTask";
 import { taskRepository } from "../repositories/task.repository";
+import { AppError } from "../utils/appError";
 import { deleteFile, uploadFile } from "./storage.service";
 
 async function cleanupUploadedFiles(
@@ -80,4 +81,30 @@ export async function updateTaskWithAttachments(
   } catch (error) {
     return cleanupUploadedFiles(attachments, error);
   }
+}
+
+export async function deleteTaskWithAttachments(
+  organizationId: Types.ObjectId,
+  taskId: string,
+) {
+  const task = await taskRepository.getTask(organizationId, taskId);
+  for (const attachment of task.attachments) {
+    await deleteFile(attachment.key);
+  }
+  return taskRepository.deleteTask(organizationId, taskId);
+}
+
+export async function deleteTaskAttachment(
+  organizationId: Types.ObjectId,
+  taskId: string,
+  attachmentId: string,
+) {
+  const task = await taskRepository.getTask(organizationId, taskId);
+  const attachment = task.attachments.find((item) => item._id.toString() === attachmentId);
+  if (!attachment) {
+    throw new AppError(404, "ATTACHMENT_NOT_FOUND", "Attachment not found");
+  }
+
+  await deleteFile(attachment.key);
+  return taskRepository.removeAttachment(organizationId, taskId, attachmentId);
 }
