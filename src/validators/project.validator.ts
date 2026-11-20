@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { AppError } from "../utils/appError";
-import { PROJECT_STATUSES } from "../models/enums";
+import { PROJECT_STATUSES, PROJECT_COLORS } from "../models/enums";
 
 export const createProjectSchema = z.object({
   name: z.string({ error: "Name is required" }).trim().min(2, "Name must be at least 2 characters").max(150),
@@ -10,6 +10,7 @@ export const createProjectSchema = z.object({
   status: z.enum(PROJECT_STATUSES).optional(),
   startDate: z.coerce.date().optional(),
   dueDate: z.coerce.date().optional(),
+  color: z.enum(PROJECT_COLORS).optional(), // NEW
 }).strict();
 
 export const updateProjectSchema = z.object({
@@ -18,6 +19,7 @@ export const updateProjectSchema = z.object({
   status: z.enum(PROJECT_STATUSES).optional(),
   startDate: z.coerce.date().optional(),
   dueDate: z.coerce.date().optional(),
+  color: z.enum(PROJECT_COLORS).optional(), // NEW
 }).strict().refine((data) => Object.keys(data).length > 0, {
   message: "Provide at least one field to update",
 });

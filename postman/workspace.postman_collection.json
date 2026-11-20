@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "51f6421b-e1d5-4db4-b0cc-aab1c18e9f15",
-    "name": "Task Desk - Organizations",
-    "description": "Set the token collection variable to a valid Firebase ID token. Create organization only works for a registered user who is not already in an organization. Member management requires memberEmail to be another registered user who is not already in an organization. Run Delete organization only against a disposable test organization.",
+    "name": "Task Desk - workspaces",
+    "description": "Set the token collection variable to a valid Firebase ID token. Create workspace only works for a registered user who is not already in a workspace. Member management requires memberEmail to be another registered user who is not already in a workspace. Run Delete workspace only against a disposable test workspace.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -37,17 +37,17 @@
       "type": "string"
     },
     {
-      "key": "organizationId",
+      "key": "workspaceId",
       "value": "",
       "type": "string"
     }
   ],
   "item": [
     {
-      "name": "Organizations",
+      "name": "workspaces",
       "item": [
         {
-          "name": "Create organization (user must not belong to one)",
+          "name": "Create workspace (user must not belong to one)",
           "request": {
             "method": "POST",
             "header": [
@@ -58,15 +58,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Postman Test Organization\",\n  \"description\": \"Created by the Task Desk Postman collection\"\n}"
+              "raw": "{\n  \"name\": \"Postman Test workspace\",\n  \"description\": \"Created by the Task Desk Postman collection\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/organization",
+              "raw": "{{baseUrl}}/workspace",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization"
+                "workspace"
               ]
             }
           },
@@ -76,13 +76,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Creates an organization and saves its ID', function () {",
+                  "pm.test('Creates a workspace and saves its ID', function () {",
                   "  pm.response.to.have.status(201);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",
-                  "  const organizationId = body.data && (body.data._id || body.data.id);",
-                  "  pm.expect(organizationId, 'organization ID').to.be.a('string').and.not.empty;",
-                  "  pm.collectionVariables.set('organizationId', organizationId);",
+                  "  const workspaceId = body.data && (body.data._id || body.data.id);",
+                  "  pm.expect(workspaceId, 'workspace ID').to.be.a('string').and.not.empty;",
+                  "  pm.collectionVariables.set('workspaceId', workspaceId);",
                   "});"
                 ]
               }
@@ -90,17 +90,17 @@
           ]
         },
         {
-          "name": "Get my organization (after create, or if already a member)",
+          "name": "Get my workspace (after create, or if already a member)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/organization",
+              "raw": "{{baseUrl}}/workspace",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization"
+                "workspace"
               ]
             }
           },
@@ -110,11 +110,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Returns the current organization and role', function () {",
+                  "pm.test('Returns the current workspace and role', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",
-                  "  pm.expect(body.data.organization).to.be.an('object');",
+                  "  pm.expect(body.data.workspace).to.be.an('object');",
                   "  pm.expect(body.data.role).to.be.a('string');",
                   "});"
                 ]
@@ -123,7 +123,7 @@
           ]
         },
         {
-          "name": "Update my organization",
+          "name": "Update my workspace",
           "request": {
             "method": "PATCH",
             "header": [
@@ -134,15 +134,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Postman Organization\",\n  \"description\": \"Updated by the Task Desk Postman collection\"\n}"
+              "raw": "{\n  \"name\": \"Updated Postma workspace\",\n  \"description\": \"Updated by the Task Desk Postman collection\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/organization",
+              "raw": "{{baseUrl}}/workspace",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization"
+                "workspace"
               ]
             }
           },
@@ -152,11 +152,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Updates the organization', function () {",
+                  "pm.test('Updates the workspace', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",
-                  "  pm.expect(body.data.name).to.eql('Updated Postman Organization');",
+                  "  pm.expect(body.data.name).to.eql('Updated Postma workspace');",
                   "});"
                 ]
               }
@@ -164,17 +164,17 @@
           ]
         },
         {
-          "name": "List organization members",
+          "name": "List workspace members",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/organization/members",
+              "raw": "{{baseUrl}}/workspace/members",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization",
+                "workspace",
                 "members"
               ]
             }
@@ -185,7 +185,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Returns organization members', function () {",
+                  "pm.test('Returns workspace members', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",
@@ -211,12 +211,12 @@
               "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"role\": \"employee\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/organization/members",
+              "raw": "{{baseUrl}}/workspace/members",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization",
+                "workspace",
                 "members"
               ]
             }
@@ -255,12 +255,12 @@
               "raw": "{\n  \"role\": \"admin\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/organization/members/{{memberId}}",
+              "raw": "{{baseUrl}}/workspace/members/{{memberId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization",
+                "workspace",
                 "members",
                 "{{memberId}}"
               ]
@@ -289,12 +289,12 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/organization/members/{{memberId}}",
+              "raw": "{{baseUrl}}/workspace/members/{{memberId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization",
+                "workspace",
                 "members",
                 "{{memberId}}"
               ]
@@ -317,20 +317,20 @@
           ]
         },
         {
-          "name": "Delete organization (run only against a disposable test organization)",
+          "name": "Delete workspace (run only against a disposable test workspace)",
           "request": {
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/organization",
+              "raw": "{{baseUrl}}/workspace",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "organization"
+                "workspace"
               ]
             },
-            "description": "Soft-deletes the current organization and detaches all of its members. Only run this against a disposable test organization."
+            "description": "Soft-deletes the current workspace and detaches all of its members. Only run this against a disposable test workspace."
           },
           "event": [
             {
@@ -338,7 +338,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Soft-deletes the organization', function () {",
+                  "pm.test('Soft-deletes the workspace', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",

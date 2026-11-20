@@ -1,8 +1,8 @@
 
 import type { Types } from "mongoose";
-import type { OrgRole } from "../models/enums";
+import type { WorkspaceRole } from "../models/enums";
 
-export namespace IOrganization {
+export namespace IWorkspace {
   export interface Model {
     _id: Types.ObjectId;
     name: string;
@@ -26,11 +26,11 @@ export namespace IOrganization {
 
   export interface AddMemberObj {
     email: string;
-    role: OrgRole;
+    role: WorkspaceRole;
   }
 
   export interface ChangeRoleObj {
-    role: OrgRole;
+    role: WorkspaceRole;
   }
 
   export interface Member {
@@ -38,9 +38,10 @@ export namespace IOrganization {
     name: string;
     email: string;
     avatarUrl?: string;
-    role: OrgRole;
+    role: WorkspaceRole;
     createdAt: Date;
   }
 
   export type PersistenceModel = Model;
 }
+

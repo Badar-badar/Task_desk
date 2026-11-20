@@ -1,5 +1,5 @@
-import {Schema, Types, model} from "mongoose";
-import {ORG_ROLES, OrgRole} from './enums'
+import { Schema, Types, model } from "mongoose";
+import type { WorkspaceRole } from "./enums";
 
 export interface IUser{
     _id: Types.ObjectId,
@@ -7,12 +7,12 @@ export interface IUser{
     name:string,
     email:string,
     avatarUrl?: string | null,
-    organizationId:Types.ObjectId | null,
-    role:OrgRole | null,
     isActive:boolean,
     lastLogin?: Date,
     createdAt: Date,
-    updatedAt: Date
+    updatedAt: Date;
+    workspaceId?: Types.ObjectId | null;
+    role?: WorkspaceRole | null;
 };
 
 
@@ -35,27 +35,21 @@ const userSchema = new Schema<IUser>(
             lowercase:true,
             unique:true
         },
-        organizationId:{
-            type:Schema.Types.ObjectId,
-            ref:'Organization',
-            default:null
-        },
-        role:{
-            type:String,
-            enum: [...ORG_ROLES,null],
-            default:null
-        },
+       
         isActive:{
             type:Boolean,
             default: true,
         },
         lastLogin:{
             type:Date
-        }
+        },
+        workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", default: null },
+        role: { type: String, enum: ["owner", "member"], default: null },
     },
     {
         timestamps:true,
-    }
-)
+    },
+);
 
-export const User = model<IUser>('User',userSchema);
+export const User = model<IUser>("User", userSchema);
+

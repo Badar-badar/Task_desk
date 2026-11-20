@@ -1,17 +1,18 @@
 
 import type { Types } from "mongoose";
-import type { ProjectStatus } from "../models/enums";
+import type { ProjectStatus, ProjectColor } from "../models/enums";
 
 export namespace IProject {
   export interface Model {
     _id: Types.ObjectId;
-    organizationId: Types.ObjectId;
+    workspaceId: Types.ObjectId;
     name: string;
     description?: string;
     status: ProjectStatus;
     startDate?: Date;
     endDate?: Date;
-    createdBy: Types.ObjectId;
+    ownerId: Types.ObjectId;
+    color:ProjectColor,
     createdAt: Date;
     updatedAt: Date;
   }
@@ -22,6 +23,7 @@ export namespace IProject {
     status?: ProjectStatus;
     startDate?: Date;
     dueDate?: Date;
+    color?:ProjectColor;
   }
 
   export interface UpdateObj {
@@ -30,5 +32,6 @@ export namespace IProject {
     status?: ProjectStatus;
     startDate?: Date;
     dueDate?: Date;
+    color?:ProjectColor;
   }
 }

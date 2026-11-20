@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "40df30f7-59ba-4f4b-99d0-03acdc1f47fc",
     "name": "Task Desk - Projects",
-    "description": "Set token to a valid Firebase ID token for a user in an organization. Create/list/update/delete require the owner or admin role. Run Create project before Get, Update, or Delete; its ID is saved as createdProjectId. Copy that ID to the Task collection's projectId to test tasks. Delete permanently removes the project; use a test project only.",
+    "description": "Set token to a valid Firebase ID token for a user in a workspace. Create/list/update/delete require the owner or admin role. Run Create project before Get, Update, or Delete; its ID is saved as createdProjectId. Copy that ID to the Task collection's projectId to test tasks. Delete permanently removes the project; use a test project only.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -57,7 +57,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Returns the organization project list', function () {",
+                  "pm.test('Returns the workspace project list', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
                   "  pm.expect(body.success).to.eql(true);",

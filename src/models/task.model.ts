@@ -27,17 +27,13 @@ const taskAttachmentSchema = new Schema<ITask.Attachment>(
 
 const taskSchema = new Schema<ITask.Model>(
   {
-    organizationId: {
-      type: Schema.Types.ObjectId,
-      ref: "Organization",
-      required: true,
-    },
-
+    
     projectId: {
       type: Schema.Types.ObjectId,
       ref: "Project",
       required: true,
     },
+    workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true,  },
 
     title: {
       type: String,
@@ -102,7 +98,7 @@ const taskSchema = new Schema<ITask.Model>(
   }
 );
 
-taskSchema.index({ organizationId: 1, projectId: 1 });
-taskSchema.index({ organizationId: 1, assigneeId: 1 });
+taskSchema.index({ workspaceId: 1, projectId: 1 });
+taskSchema.index({ workspaceId: 1, assigneeId: 1 });
 
-export const Task = model<ITask.Model>("Task", taskSchema);
+export const TaskModel = model<ITask.Model>("Task", taskSchema);

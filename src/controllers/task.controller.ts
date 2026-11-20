@@ -3,6 +3,8 @@ import type { RequestHandler } from "express";
 import { Types, type HydratedDocument } from "mongoose";
 import { ITask } from "../interfaces/iTask";
 import { taskRepository } from "../repositories/task.repository";
+import { projectRepository } from "../repositories/project.repository";
+import { ProjectMemberModel } from "../models/projectMember.model";
 import {
   addTaskAttachments as uploadTaskAttachments,
   deleteTaskAttachment as removeTaskAttachment,
@@ -29,56 +31,45 @@ const getParamString = (value: string | string[] | undefined): string => {
   return value ?? "";
 };
 
-const assertTaskAccess = (
-  task: HydratedDocument<ITask.Model>,
-  request: Request,
-) => {
-  const user = request.user!;
-  if (user.role === "owner" || user.role === "admin") return;
-  if (user.role === "employee" && task.assigneeId?.equals(user._id)) return;
-  throw new AppError(403, "API_ERROR", "You do not have permission to do this");
-};
-
-export const authorizeTaskAccess: RequestHandler = async (req, _res, next) => {
-  try {
-    const task = await taskRepository.getTask(req.organization!._id, getParamString(req.params.taskId));
-    assertTaskAccess(task, req);
-    next();
-  } catch (error) {
-    next(error);
+// assignee must belong to the project
+const assertProjectMember = async (projectId: Types.ObjectId | string, userId: string) => {
+  const member = await ProjectMemberModel.exists({ projectId, userId });
+  if (!member) {
+    throw new AppError(400, "VALIDATION_ERROR", "Assignee must be a member of this project");
   }
 };
 
-export const enforceEmployeeStatusOnly: RequestHandler = (req, _res, next) => {
+// Runs after upload.array so multipart fields are in req.body.
+// Admin/editor can edit anything; an assignee with a lower role may only change status.
+export const enforceAssigneeStatusOnly: RequestHandler = (req, _res, next) => {
+  if (["admin", "editor"].includes(req.projectRole!)) return next();
+
   const files = Array.isArray(req.files) ? req.files : [];
   const fields = Object.keys(req.body ?? {});
-  if (
-    req.user!.role === "employee"
-    && (files.length > 0 || fields.some((field) => field !== "status"))
-  ) {
-    next(new AppError(403, "API_ERROR", "You do not have permission to do this"));
-    return;
+  const onlyStatus = fields.length > 0 && fields.every((field) => field === "status");
+
+  if (!onlyStatus || files.length > 0) {
+    return next(new AppError(403, "FORBIDDEN", "You can only update the status of your own task"));
   }
   next();
 };
 
 export const createTask = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = getParamString(req.params.projectId);
+    const projectId = req.projectId!;
     const files = Array.isArray(req.files) ? req.files : [];
-    let task = await taskRepository.createTask(
-      req.organization!._id,
-      projectId,
-      req.user!._id,
-      req.body as ITask.CreateObj,
-    );
+    const body = req.body as ITask.CreateObj;
+
+    if (body.assigneeId) await assertProjectMember(projectId, body.assigneeId.toString());
+
+    let task = await taskRepository.createTask(projectId, req.user!._id, body);
 
     if (files.length) {
       try {
-        task = await uploadTaskAttachments(req.organization!._id, task._id.toString(), files);
+        task = await uploadTaskAttachments(req.workspaceId!, task._id.toString(), files);
       } catch (error) {
         try {
-          await taskRepository.deleteTask(req.organization!._id, task._id.toString());
+          await taskRepository.deleteTask(req.workspaceId!, task._id.toString());
         } catch (rollbackError) {
           throw new AggregateError(
             [error, rollbackError],
@@ -101,8 +92,7 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
 
 export const listTasks = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = getParamString(req.params.projectId);
-    const tasks = await taskRepository.listTasks(req.organization!._id, projectId);
+    const tasks = await taskRepository.listTasks(req.projectId!);
 
     res.status(200).json({ success: true, data: await Promise.all(tasks.map(serializeTask)) });
   } catch (error) {
@@ -110,20 +100,30 @@ export const listTasks = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-export const listOrganizationTasks = async (req: Request, res: Response, next: NextFunction) => {
+// tasks across all projects the user is a member of
+export const listMyTasks = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const query = req.query as {
       projectId?: string;
       assigneeId?: string;
       status?: ITask.Model["status"];
     };
-    const tasks = await taskRepository.listOrganizationTasks(req.organization!._id, {
-      ...(query.projectId ? { projectId: query.projectId } : {}),
-      ...(query.assigneeId
-        ? { assigneeId: query.assigneeId === "me" ? req.user!._id : new Types.ObjectId(query.assigneeId) }
-        : {}),
-      ...(query.status ? { status: query.status } : {}),
-    });
+
+    // only projects in the active workspace where I am a member
+    let projectIds = await projectRepository.getMyProjectIds(req.workspaceId!, req.user!._id);
+
+    if (query.projectId) {
+      projectIds = projectIds.filter((id) => id.toString() === query.projectId);
+    }
+
+    const tasks = projectIds.length
+      ? await taskRepository.listTasksByProjects(projectIds, {
+          ...(query.assigneeId
+            ? { assigneeId: query.assigneeId === "me" ? req.user!._id : new Types.ObjectId(query.assigneeId) }
+            : {}),
+          ...(query.status ? { status: query.status } : {}),
+        })
+      : [];
 
     res.status(200).json({ success: true, data: await Promise.all(tasks.map(serializeTask)) });
   } catch (error) {
@@ -133,10 +133,8 @@ export const listOrganizationTasks = async (req: Request, res: Response, next: N
 
 export const getTask = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const taskId = getParamString(req.params.taskId);
-    const task = await taskRepository.getTask(req.organization!._id, taskId);
-
-    res.status(200).json({ success: true, data: await serializeTask(task) });
+    // already loaded and access-checked by taskAccess
+    res.status(200).json({ success: true, data: await serializeTask(req.task!) });
   } catch (error) {
     next(error);
   }
@@ -146,19 +144,17 @@ export const updateTask = async (req: Request, res: Response, next: NextFunction
   try {
     const taskId = getParamString(req.params.taskId);
     const files = Array.isArray(req.files) ? req.files : [];
-    const currentTask = await taskRepository.getTask(req.organization!._id, taskId);
-    assertTaskAccess(currentTask, req);
-
     const updates = (req.body ?? {}) as ITask.UpdateObj;
-    if (req.user!.role === "employee") {
-      if (files.length || Object.keys(updates).some((field) => field !== "status")) {
-        throw new AppError(403, "API_ERROR", "You do not have permission to do this");
-      }
-    }
+
     if (!Object.keys(updates).length && !files.length) {
       throw new AppError(400, "VALIDATION_ERROR", "Provide fields to update or attach at least one file");
     }
-    const task = await updateTaskWithAttachments(req.organization!._id, taskId, updates, files);
+
+    if (updates.assigneeId) {
+      await assertProjectMember(req.projectId!, updates.assigneeId.toString());
+    }
+
+    const task = await updateTaskWithAttachments(req.workspaceId!, taskId, updates, files);
 
     res.status(200).json({
       success: true,
@@ -173,14 +169,11 @@ export const updateTask = async (req: Request, res: Response, next: NextFunction
 export const addTaskAttachments = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = getParamString(req.params.taskId);
-    const currentTask = await taskRepository.getTask(req.organization!._id, taskId);
-    assertTaskAccess(currentTask, req);
-
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
       throw new AppError(400, "NO_FILES", "Select at least one file to upload");
     }
-    const task = await uploadTaskAttachments(req.organization!._id, taskId, files);
+    const task = await uploadTaskAttachments(req.workspaceId!, taskId, files);
 
     res.status(201).json({
       success: true,
@@ -196,9 +189,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
   try {
     const taskId = getParamString(req.params.taskId);
     const attachmentId = getParamString(req.params.attachmentId);
-    const currentTask = await taskRepository.getTask(req.organization!._id, taskId);
-    assertTaskAccess(currentTask, req);
-    const task = await removeTaskAttachment(req.organization!._id, taskId, attachmentId);
+    const task = await removeTaskAttachment(req.workspaceId!, taskId, attachmentId);
 
     res.status(200).json({
       success: true,
@@ -212,8 +203,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
 
 export const deleteTask = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const taskId = getParamString(req.params.taskId);
-    await deleteTaskWithAttachments(req.organization!._id, taskId);
+    await deleteTaskWithAttachments(req.workspaceId!, getParamString(req.params.taskId));
 
     res.status(200).json({ success: true, message: "Task deleted successfully" });
   } catch (error) {

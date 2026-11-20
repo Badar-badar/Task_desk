@@ -10,7 +10,6 @@ if (!accountIdOrEndpoint || !accessKeyId || !secretAccessKey || !bucket) {
   throw new Error("Missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, or R2_BUCKET in .env");
 }
 
-// R2_ACCOUNT_ID may be either the Cloudflare account ID or its full endpoint.
 const endpoint = accountIdOrEndpoint.includes("://")
   ? accountIdOrEndpoint.replace(/\/+$/, "")
   : `https://${accountIdOrEndpoint}.r2.cloudflarestorage.com`;

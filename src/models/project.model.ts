@@ -1,16 +1,16 @@
 
 import mongoose from "mongoose";
 import type { IProject } from "../interfaces/iProject";
-import { PROJECT_STATUSES } from "./enums";
+import { PROJECT_STATUSES, PROJECT_COLORS } from "./enums";
 
 const projectSchema = new mongoose.Schema<IProject.Model>(
   {
-    organizationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Organization",
-      required: true,
+   
+    workspaceId:{
+         type:mongoose.Schema.Types.ObjectId,
+         ref:'Workspace',
+         required:true
     },
-
     name: {
       type: String,
       required: true,
@@ -38,18 +38,26 @@ const projectSchema = new mongoose.Schema<IProject.Model>(
       type: Date,
     },
 
-    createdBy: {
+     color: {
+      type: String,
+      enum: PROJECT_COLORS,
+      default: () =>
+        PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
+    },
+    ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
+
   },
   {
     timestamps: true,
   },
 );
 
-projectSchema.index({ organizationId: 1 });
+projectSchema.index({ workspaceId: 1 });
 
 export const ProjectModel = mongoose.model<IProject.Model>(
   "Project",

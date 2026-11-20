@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { getSummary } from "../controllers/dashboard.controller";
 import { authenticate } from "../middlewares/auth";
-import { orgContext } from "../middlewares/orgContext";
+import { workspaceContext } from "../middlewares/workspaceAccess";
 
 const dashboardRouter = Router();
 
-dashboardRouter.use(authenticate, orgContext);
+dashboardRouter.use(authenticate, workspaceContext());
 dashboardRouter.get("/summary", getSummary);
 
 export default dashboardRouter;

@@ -15,7 +15,7 @@ export namespace ITask {
 
   export interface Model {
     _id: Types.ObjectId;
-    organizationId: Types.ObjectId;
+    workspaceId: Types.ObjectId;
     projectId: Types.ObjectId;
     title: string;
     description?: string;

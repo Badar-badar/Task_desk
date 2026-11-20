@@ -1,10 +1,13 @@
 import { Router } from "express";
 import * as taskController from "../controllers/task.controller";
 import { authenticate } from "../middlewares/auth";
-import { orgContext } from "../middlewares/orgContext";
-import { requireRole } from "../middlewares/rbac";
+import { projectAccess } from "../middlewares/projectAccess";
+import { taskAccess } from "../middlewares/taskAccess";
 import { upload } from "../middlewares/upload.middleware";
 import { validate } from "../middlewares/validate";
+import { ALL_ROLES } from "../models/enums";
+import { taskCommentRouter } from "./comment.routes";
+import { workspaceContext } from "../middlewares/workspaceAccess";
 import {
   createTaskSchema,
   projectTasksSchema,
@@ -16,40 +19,70 @@ import {
 
 const taskRouter = Router();
 
-taskRouter.use(authenticate, orgContext);
+taskRouter.use(authenticate, workspaceContext());
+taskRouter.use("/:taskId/comments", taskCommentRouter);
 
-taskRouter.get("/", validate({ query: taskListQuerySchema }), taskController.listOrganizationTasks);
-taskRouter.get("/project/:projectId", validate({ params: projectTasksSchema }), taskController.listTasks);
+// Tasks across all projects the user belongs to in the selected workspace.
+taskRouter.get(
+  "/",
+  validate({ query: taskListQuerySchema }),
+  taskController.listMyTasks,
+);
+
+taskRouter.get(
+  "/project/:projectId",
+  validate({ params: projectTasksSchema }),
+  projectAccess(ALL_ROLES),
+  taskController.listTasks,
+);
+
 taskRouter.post(
   "/project/:projectId",
-  requireRole("owner", "admin"),
   validate({ params: projectTasksSchema }),
+  projectAccess(["admin", "editor"]),
   upload.array("files", 5),
   validate({ body: createTaskSchema }),
   taskController.createTask,
 );
+
 taskRouter.post(
   "/:taskId/attachments",
   validate({ params: taskIdSchema }),
-  taskController.authorizeTaskAccess,
+  taskAccess({ allowedRoles: ["admin", "editor"], allowAssignee: true }),
   upload.array("files", 5),
   taskController.addTaskAttachments,
 );
+
 taskRouter.delete(
   "/:taskId/attachments/:attachmentId",
   validate({ params: taskAttachmentIdSchema }),
+  taskAccess({ allowedRoles: ["admin", "editor"], allowAssignee: true }),
   taskController.deleteTaskAttachment,
 );
-taskRouter.get("/:taskId", validate({ params: taskIdSchema }), taskController.getTask);
+
+taskRouter.get(
+  "/:taskId",
+  validate({ params: taskIdSchema }),
+  taskAccess({ allowedRoles: ALL_ROLES }),
+  taskController.getTask,
+);
+
 taskRouter.patch(
   "/:taskId",
   validate({ params: taskIdSchema }),
-  taskController.authorizeTaskAccess,
+  taskAccess({ allowedRoles: ["admin", "editor"], allowAssignee: true }),
   upload.array("files", 5),
-  taskController.enforceEmployeeStatusOnly,
+  taskController.enforceAssigneeStatusOnly,
   validate({ body: updateTaskSchema }),
   taskController.updateTask,
 );
-taskRouter.delete("/:taskId", requireRole("owner", "admin"), validate({ params: taskIdSchema }), taskController.deleteTask);
+
+taskRouter.delete(
+  "/:taskId",
+  validate({ params: taskIdSchema }),
+  taskAccess({ allowedRoles: ["admin", "editor"] }),
+  taskController.deleteTask,
+);
 
 export default taskRouter;
+

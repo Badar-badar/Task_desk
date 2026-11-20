@@ -1,43 +1,49 @@
-
 import type { Request, Response } from "express";
 import type { IProject } from "../interfaces/iProject";
-import { projectRepository} from "../repositories/project.repository";
+import { projectRepository } from "../repositories/project.repository";
 import { deleteFile } from "../services/storage.service";
 
-
 export const create = async (req: Request, res: Response) => {
-  const project = await projectRepository.createProject(req.organization!._id,req.user!._id,req.body as IProject.CreateObj);
-
-  res.status(201).json({success: true,data: project})};
+  const project = await projectRepository.createProject(
+    req.workspaceId!,
+    req.user!._id,
+    req.body as IProject.CreateObj,
+  );
+  res.status(201).json({ success: true, data: project });
+};
 
 export const getProjects = async (req: Request, res: Response) => {
-  const projects = await projectRepository.listProjects(req.organization!._id);
-
-  res.status(200).json({success: true,data: projects});
+  const projects = await projectRepository.listProjects(req.workspaceId!, req.user!._id);
+  res.status(200).json({ success: true, data: projects });
 };
 
 export const getOne = async (req: Request, res: Response) => {
-  const project = await projectRepository.getProject(req.organization!._id,req.params.projectId as string);
+  const project = await projectRepository.getProject(
+    req.projectId!,
+    req.projectRole!,
+    req.user?._id!,
+  );
 
-  res.status(200).json({success: true,data: project});
+  res.status(200).json({ success: true, data: project });
 };
 
 export const update = async (req: Request, res: Response) => {
-  const project = await projectRepository.updateProject(req.organization!._id,req.params.projectId as string,req.body as IProject.UpdateObj);
+  const project = await projectRepository.updateProject(
+    req.projectId!,
+    req.body as IProject.UpdateObj,
+  );
 
-  res.status(200).json({success: true, data: project});
+  res.status(200).json({ success: true, data: project });
 };
 
 export const remove = async (req: Request, res: Response) => {
-  const { tasks } = await projectRepository.deleteProject(
-    req.organization!._id,
-    req.params.projectId as string,
-  );
+  const { tasks } = await projectRepository.deleteProject(req.projectId!);
+
   for (const task of tasks) {
     for (const attachment of task.attachments) {
       await deleteFile(attachment.key);
     }
   }
 
-  res.status(200).json({success: true,message: "Project deleted successfully"});
+  res.status(200).json({ success: true, message: "Project deleted successfully" });
 };

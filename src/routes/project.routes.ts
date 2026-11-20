@@ -1,9 +1,13 @@
-
 import express from "express";
 import { authenticate } from "../middlewares/auth";
-import { orgContext } from "../middlewares/orgContext";
-import { requireRole } from "../middlewares/rbac";
+import { projectAccess } from "../middlewares/projectAccess";
 import { validate } from "../middlewares/validate";
+import { ALL_ROLES } from "../models/enums";
+import projectMemberRouter from "./projectMember.routes";
+import { projectFavoriteRouter } from "./favourite.routes";
+import invitationRouter from "./invitation.routes";
+import { workspaceContext } from "../middlewares/workspaceAccess";
+
 
 import {
   create,
@@ -21,12 +25,39 @@ import {
 
 const projectRouter = express.Router();
 
-projectRouter.use(authenticate, orgContext);
+// only authentication now (no workspaceContext)
+projectRouter.use(authenticate, workspaceContext());
 
+// list the projects where the user is a member
 projectRouter.get("/", getProjects);
-projectRouter.get("/:projectId", validate({ params: projectIdSchema }), getOne);
-projectRouter.post("/", requireRole("owner", "admin"), validate(createProjectSchema), create);
-projectRouter.patch("/:projectId",requireRole("owner", "admin"), validate({ body: updateProjectSchema, params: projectIdSchema }),update,);
-projectRouter.delete("/:projectId", requireRole("owner", "admin"), validate({ params: projectIdSchema }), remove);
+
+projectRouter.post("/", validate({ body: createProjectSchema }), create);
+
+projectRouter.use("/:projectId/members", projectMemberRouter);
+projectRouter.use("/:projectId/invitations", invitationRouter);
+projectRouter.use("/:projectId/favorite", projectFavoriteRouter);
+
+projectRouter.get(
+  "/:projectId",
+  validate({ params: projectIdSchema }),
+  projectAccess(ALL_ROLES),
+  getOne,
+);
+
+projectRouter.patch(
+  "/:projectId",
+  validate({ body: updateProjectSchema, params: projectIdSchema }),
+  projectAccess(["admin"]),
+  update,
+);
+
+projectRouter.delete(
+  "/:projectId",
+  validate({ params: projectIdSchema }),
+  projectAccess(["admin"]),
+  remove,
+);
+
+
 
 export default projectRouter;

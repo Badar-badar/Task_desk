@@ -1,0 +1,58 @@
+import type { Request, Response } from "express";
+import { projectMemberRepository } from "../repositories/projectMember.repository";
+import { AppError } from "../utils/appError";
+import type { MemberRole } from "../models/enums";
+import { Types } from "mongoose";
+
+export const list = async (req: Request, res: Response) => {
+  const members = await projectMemberRepository.listMembers(req.projectId!);
+  res.status(200).json({ success: true, data: members });
+};
+
+export const add = async (req: Request, res: Response) => {
+  const { email, role } = req.body as { email: string; role: MemberRole };
+
+  const result = await projectMemberRepository.addMember(
+    req.projectId!,
+    req.user!._id,
+    email,
+    role,
+  );
+
+  if (result.invited) {
+    res.status(201).json({
+      success: true,
+      invited: true,
+      message: "No account with this email yet. They will join when they sign up",
+      data: result.invitation,
+    });
+    return;
+  }
+
+  res.status(201).json({ success: true, invited: false, data: result.member });
+};
+
+export const updateRole = async (req: Request, res: Response) => {
+  const member = await projectMemberRepository.updateRole(
+    req.projectId!,
+    req.params.userId as string,
+    (req.body as { role: MemberRole }).role,
+  );
+  res.status(200).json({ success: true, data: member });
+};
+
+// admin can remove anyone, any member can remove themselves (leave)
+export const remove = async (req: Request, res: Response) => {
+  const userId = req.params.userId as string;
+  const isSelf = new Types.ObjectId(userId).equals(req.user!._id);
+
+  if (!isSelf && req.projectRole !== "admin") {
+    throw new AppError(403, "FORBIDDEN", "You do not have permission to do this");
+  }
+
+  await projectMemberRepository.removeMember(req.projectId!, userId);
+  res.status(200).json({
+    success: true,
+    message: isSelf ? "You left the project" : "Member removed successfully",
+  });
+};

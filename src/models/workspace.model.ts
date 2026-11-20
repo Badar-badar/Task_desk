@@ -1,8 +1,8 @@
 
 import mongoose from "mongoose";
-import type { IOrganization } from "../interfaces/iOrganization";
+import type { IWorkspace } from "../interfaces/iWorkspace";
 
-const organizationSchema = new mongoose.Schema<IOrganization.PersistenceModel>(
+const workspaceSchema = new mongoose.Schema<IWorkspace.PersistenceModel>(
   {
     name: {
       type: String,
@@ -17,12 +17,6 @@ const organizationSchema = new mongoose.Schema<IOrganization.PersistenceModel>(
       unique: true,
       lowercase: true,
       trim: true,
-    },
-
-    description: {
-      type: String,
-      trim: true,
-      maxlength: 500,
     },
 
     ownerId: {
@@ -41,9 +35,10 @@ const organizationSchema = new mongoose.Schema<IOrganization.PersistenceModel>(
   },
 );
 
-organizationSchema.index({ ownerId: 1 });
+workspaceSchema.index({ ownerId: 1 });
 
-export const OrganizationModel = mongoose.model<IOrganization.PersistenceModel>(
-  "Organization",
-  organizationSchema,
+export const WorkspaceModel = mongoose.model<IWorkspace.PersistenceModel>(
+  "Workspace",
+  workspaceSchema,
+  "workspaces",
 );

@@ -29,7 +29,7 @@ async function cleanupUploadedFiles(
 }
 
 async function uploadTaskFiles(
-  organizationId: Types.ObjectId,
+  workspaceId: Types.ObjectId,
   taskId: string,
   files: Express.Multer.File[],
 ): Promise<ITask.NewAttachment[]> {
@@ -38,7 +38,7 @@ async function uploadTaskFiles(
   try {
     for (const file of files) {
       uploaded.push(
-        await uploadFile(file, `organizations/${organizationId}/tasks/${taskId}`),
+        await uploadFile(file, `workspaces/${workspaceId}/tasks/${taskId}`),
       );
     }
   } catch (error) {
@@ -49,62 +49,62 @@ async function uploadTaskFiles(
 }
 
 export async function addTaskAttachments(
-  organizationId: Types.ObjectId,
+  workspaceId: Types.ObjectId,
   taskId: string,
   files: Express.Multer.File[],
 ) {
-  await taskRepository.getTask(organizationId, taskId);
-  const attachments = await uploadTaskFiles(organizationId, taskId, files);
+  await taskRepository.getTask(workspaceId, taskId);
+  const attachments = await uploadTaskFiles(workspaceId, taskId, files);
 
   try {
-    return await taskRepository.addAttachments(organizationId, taskId, attachments);
+    return await taskRepository.addAttachments(workspaceId, taskId, attachments);
   } catch (error) {
     return cleanupUploadedFiles(attachments, error);
   }
 }
 
 export async function updateTaskWithAttachments(
-  organizationId: Types.ObjectId,
+  workspaceId: Types.ObjectId,
   taskId: string,
   input: ITask.UpdateObj,
   files: Express.Multer.File[],
 ) {
   if (!files.length) {
-    return taskRepository.updateTask(organizationId, taskId, input);
+    return taskRepository.updateTask(workspaceId, taskId, input);
   }
 
-  await taskRepository.getTask(organizationId, taskId);
-  const attachments = await uploadTaskFiles(organizationId, taskId, files);
+  await taskRepository.getTask(workspaceId, taskId);
+  const attachments = await uploadTaskFiles(workspaceId, taskId, files);
 
   try {
-    return await taskRepository.updateTask(organizationId, taskId, input, attachments);
+    return await taskRepository.updateTask(workspaceId, taskId, input, attachments);
   } catch (error) {
     return cleanupUploadedFiles(attachments, error);
   }
 }
 
 export async function deleteTaskWithAttachments(
-  organizationId: Types.ObjectId,
+  workspaceId: Types.ObjectId,
   taskId: string,
 ) {
-  const task = await taskRepository.getTask(organizationId, taskId);
+  const task = await taskRepository.getTask(workspaceId, taskId);
   for (const attachment of task.attachments) {
     await deleteFile(attachment.key);
   }
-  return taskRepository.deleteTask(organizationId, taskId);
+  return taskRepository.deleteTask(workspaceId, taskId);
 }
 
 export async function deleteTaskAttachment(
-  organizationId: Types.ObjectId,
+  workspaceId: Types.ObjectId,
   taskId: string,
   attachmentId: string,
 ) {
-  const task = await taskRepository.getTask(organizationId, taskId);
+  const task = await taskRepository.getTask(workspaceId, taskId);
   const attachment = task.attachments.find((item) => item._id.toString() === attachmentId);
   if (!attachment) {
     throw new AppError(404, "ATTACHMENT_NOT_FOUND", "Attachment not found");
   }
 
   await deleteFile(attachment.key);
-  return taskRepository.removeAttachment(organizationId, taskId, attachmentId);
+  return taskRepository.removeAttachment(workspaceId, taskId, attachmentId);
 }
