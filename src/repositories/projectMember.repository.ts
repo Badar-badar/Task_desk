@@ -4,6 +4,7 @@ import { ProjectMemberModel } from "../models/projectMember.model";
 import { InvitationModel } from "../models/invitation.model";
 import { FavoriteModel } from "../models/favourite";
 import { User } from "../models/user.model";
+import { ProjectModel } from "../models/project.model";
 import { taskRepository } from "./task.repository";
 import { AppError } from "../utils/appError";
 
@@ -61,7 +62,21 @@ class ProjectMemberRepository {
       { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
-    return { invited: true as const, invitation };
+    const [project, inviter] = await Promise.all([
+      ProjectModel.findById(projectId).select("name").lean(),
+      User.findById(invitedBy).select("name").lean(),
+    ]);
+
+    if (!project || !inviter) {
+      throw new AppError(404, "INVITATION_CONTEXT_NOT_FOUND", "Could not load project invitation details");
+    }
+
+    return {
+      invited: true as const,
+      invitation,
+      projectName: project.name,
+      inviterName: inviter.name,
+    };
   }
 
   public async updateRole(projectId: Types.ObjectId, userId: string, role: MemberRole) {

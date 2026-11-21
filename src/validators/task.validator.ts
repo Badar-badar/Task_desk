@@ -41,6 +41,15 @@ export const taskIdSchema = z.object({
   }),
 });
 
+export const taskProjectLinkBodySchema = z.object({
+  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID"),
+}).strict();
+
+export const taskProjectParamsSchema = z.object({
+  taskId: z.string().refine(mongoose.isValidObjectId, "Invalid task ID"),
+  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID"),
+});
+
 export const taskAttachmentIdSchema = z.object({
   taskId: z.string().refine(mongoose.isValidObjectId, {
     message: "Invalid task ID",

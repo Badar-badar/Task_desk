@@ -14,6 +14,8 @@ import {
   taskAttachmentIdSchema,
   taskIdSchema,
   taskListQuerySchema,
+  taskProjectLinkBodySchema,
+  taskProjectParamsSchema,
   updateTaskSchema,
 } from "../validators/task.validator";
 
@@ -58,6 +60,20 @@ taskRouter.delete(
   validate({ params: taskAttachmentIdSchema }),
   taskAccess({ allowedRoles: ["admin", "editor"], allowAssignee: true }),
   taskController.deleteTaskAttachment,
+);
+
+taskRouter.post(
+  "/:taskId/projects",
+  validate({ params: taskIdSchema, body: taskProjectLinkBodySchema }),
+  taskAccess({ allowedRoles: ["admin", "editor"] }),
+  taskController.addTaskProject,
+);
+
+taskRouter.delete(
+  "/:taskId/projects/:projectId",
+  validate({ params: taskProjectParamsSchema }),
+  taskAccess({ allowedRoles: ["admin", "editor"] }),
+  taskController.removeTaskProject,
 );
 
 taskRouter.get(

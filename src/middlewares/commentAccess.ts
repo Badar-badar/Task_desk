@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { CommentModel } from "../models/comment.model";
 import { ProjectMemberModel } from "../models/projectMember.model";
+import { TaskModel } from "../models/task.model";
 import type { MemberRole } from "../models/enums";
 import { AppError } from "../utils/appError";
 
@@ -21,10 +22,12 @@ export const commentAccess =
       });
       if (!comment) throw new AppError(404, "COMMENT_NOT_FOUND", "Comment not found");
 
-      const membership = await ProjectMemberModel.findOne({
-        projectId: comment.projectId,
-        userId: req.user!._id,
-      }).lean();
+      const task = await TaskModel.findById(comment.taskId).select("projectId projectIds");
+      if (!task) throw new AppError(404, "COMMENT_NOT_FOUND", "Comment not found");
+      const projectIds = [task.projectId, ...(task.projectIds ?? [])];
+      const memberships = await ProjectMemberModel.find({ projectId: { $in: projectIds }, userId: req.user!._id }).lean();
+      const roleRank: Record<string, number> = { admin: 4, editor: 3, commenter: 2, viewer: 1 };
+      const membership = memberships.sort((a, b) => (roleRank[b.role] ?? 0) - (roleRank[a.role] ?? 0))[0];
       if (!membership) throw new AppError(404, "COMMENT_NOT_FOUND", "Comment not found");
 
       const isAuthor = comment.authorId.equals(req.user!._id);

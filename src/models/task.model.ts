@@ -33,6 +33,7 @@ const taskSchema = new Schema<ITask.Model>(
       ref: "Project",
       required: true,
     },
+    projectIds: [{ type: Schema.Types.ObjectId, ref: "Project" }],
     workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true,  },
 
     title: {

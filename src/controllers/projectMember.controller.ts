@@ -3,6 +3,7 @@ import { projectMemberRepository } from "../repositories/projectMember.repositor
 import { AppError } from "../utils/appError";
 import type { MemberRole } from "../models/enums";
 import { Types } from "mongoose";
+import { sendInviteEmail } from "../services/email.service";
 
 export const list = async (req: Request, res: Response) => {
   const members = await projectMemberRepository.listMembers(req.projectId!);
@@ -20,10 +21,25 @@ export const add = async (req: Request, res: Response) => {
   );
 
   if (result.invited) {
+    try {
+      await sendInviteEmail(result.invitation.email, {
+        inviterName: result.inviterName,
+        projectName: result.projectName,
+        role: result.invitation.role,
+      });
+    } catch (error) {
+      console.error("Failed to send project invitation email", error);
+      throw new AppError(
+        502,
+        "INVITATION_EMAIL_FAILED",
+        "Invitation was saved, but its email could not be sent. Please try again.",
+      );
+    }
+
     res.status(201).json({
       success: true,
       invited: true,
-      message: "No account with this email yet. They will join when they sign up",
+      message: "Invitation email sent. They can join by signing up with this email address.",
       data: result.invitation,
     });
     return;

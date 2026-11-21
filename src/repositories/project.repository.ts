@@ -117,19 +117,11 @@ public async getMyProjectIds(workspaceId: Types.ObjectId, userId: Types.ObjectId
     }
 
     const stats = await TaskModel.aggregate<{ _id: Types.ObjectId; total: number; done: number }>([
-      {
-        $match: {
-          projectId: { $in: projects.map((project) => project._id) },
-          deletedAt: null,
-        },
-      },
-      {
-        $group: {
-          _id: "$projectId",
-          total: { $sum: 1 },
-          done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
-        },
-      },
+      { $match: { $or: [{ projectId: { $in: projects.map((project) => project._id) } }, { projectIds: { $in: projects.map((project) => project._id) } }], deletedAt: null } },
+      { $project: { status: 1, projectRefs: { $setUnion: [["$projectId"], { $ifNull: ["$projectIds", []] }] } } },
+      { $unwind: "$projectRefs" },
+      { $match: { projectRefs: { $in: projects.map((project) => project._id) } } },
+      { $group: { _id: "$projectRefs", total: { $sum: 1 }, done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } } } },
     ]);
     const statsByProject = new Map(stats.map(({ _id, total, done }) => [_id.toString(), { total, done }]));
 
@@ -192,7 +184,7 @@ public async getMyProjectIds(workspaceId: Types.ObjectId, userId: Types.ObjectId
     const tasks = await taskRepository.softDeleteProjectTasks(project._id);
 
     await Promise.all([
-      CommentModel.deleteMany({ projectId: project._id }),
+      tasks.length ? CommentModel.deleteMany({ taskId: { $in: tasks.map((task) => task._id) } }) : Promise.resolve(),
       InvitationModel.deleteMany({ projectId: project._id }),
       FavoriteModel.deleteMany({ projectId: project._id }),
       ProjectMemberModel.deleteMany({ projectId: project._id }),

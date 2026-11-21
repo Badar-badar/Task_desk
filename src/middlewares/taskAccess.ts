@@ -21,14 +21,16 @@ export const taskAccess =
         throw new AppError(400, "API_ERROR", "Invalid task id");
       }
 
-      const task = await TaskModel.findOne({ _id: taskId, deletedAt: null });
+      const task = await TaskModel.findOne({ _id: taskId, workspaceId: req.workspaceId, deletedAt: null });
       if (!task) throw new AppError(404, "API_ERROR", "Task not found");
 
-      const membership = await ProjectMemberModel.findOne({
-        projectId: task.projectId,
+      const projectIds = [task.projectId, ...(task.projectIds ?? [])];
+      const memberships = await ProjectMemberModel.find({
+        projectId: { $in: projectIds },
         userId: req.user!._id,
       }).lean();
-
+      const roleRank: Record<string, number> = { admin: 4, editor: 3, commenter: 2, viewer: 1 };
+      const membership = memberships.sort((a, b) => (roleRank[b.role] ?? 0) - (roleRank[a.role] ?? 0))[0];
       if (!membership) throw new AppError(404, "API_ERROR", "Task not found");
 
       const hasRole = allowedRoles.includes(membership.role);
@@ -42,7 +44,7 @@ export const taskAccess =
       }
 
       req.task = task;
-      req.projectId = task.projectId;
+      req.projectId = membership.projectId;
       req.projectRole = membership.role;
       next();
     } catch (err) {

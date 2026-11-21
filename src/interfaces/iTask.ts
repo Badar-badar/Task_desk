@@ -17,6 +17,7 @@ export namespace ITask {
     _id: Types.ObjectId;
     workspaceId: Types.ObjectId;
     projectId: Types.ObjectId;
+    projectIds?: Types.ObjectId[];
     title: string;
     description?: string;
     status: TaskStatus;

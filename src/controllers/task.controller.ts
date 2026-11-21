@@ -5,6 +5,7 @@ import { ITask } from "../interfaces/iTask";
 import { taskRepository } from "../repositories/task.repository";
 import { projectRepository } from "../repositories/project.repository";
 import { ProjectMemberModel } from "../models/projectMember.model";
+import { ProjectModel } from "../models/project.model";
 import {
   addTaskAttachments as uploadTaskAttachments,
   deleteTaskAttachment as removeTaskAttachment,
@@ -23,7 +24,11 @@ const serializeTask = async (task: HydratedDocument<ITask.Model>) => {
     })),
   );
 
-  return { ...data, attachments };
+  return {
+    ...data,
+    projectIds: [...new Set([data.projectId.toString(), ...(data.projectIds ?? []).map((id) => id.toString())])],
+    attachments,
+  };
 };
 
 const getParamString = (value: string | string[] | undefined): string => {
@@ -129,6 +134,32 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
   } catch (error) {
     next(error);
   }
+};
+
+export const addTaskProject = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = new Types.ObjectId((req.body as { projectId: string }).projectId);
+    const project = await ProjectModel.findOne({ _id: projectId, workspaceId: req.workspaceId }).select("_id");
+    if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found in this workspace");
+    const membership = await ProjectMemberModel.findOne({ projectId, userId: req.user!._id }).lean();
+    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to add tasks to this project");
+
+    const task = await taskRepository.addProjectLink(req.task!, projectId);
+    res.status(200).json({ success: true, data: await serializeTask(task) });
+  } catch (error) { next(error); }
+};
+
+export const removeTaskProject = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = new Types.ObjectId(getParamString(req.params.projectId));
+    const membership = await ProjectMemberModel.findOne({ projectId, userId: req.user!._id }).lean();
+    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to remove tasks from this project");
+
+    const task = await taskRepository.removeProjectLink(req.task!, projectId);
+    res.status(200).json({ success: true, data: await serializeTask(task) });
+  } catch (error) { next(error); }
 };
 
 export const getTask = async (req: Request, res: Response, next: NextFunction) => {

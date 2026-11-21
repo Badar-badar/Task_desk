@@ -1,4 +1,4 @@
-import { Types, UpdateQuery } from "mongoose";
+import { HydratedDocument, Types, UpdateQuery } from "mongoose";
 import { ITask } from "../interfaces/iTask";
 import { TaskModel } from "../models/task.model";
 import { ProjectModel } from "../models/project.model";
@@ -42,11 +42,35 @@ class TaskRepository {
   }
 
   public async listTasks(projectId: Types.ObjectId) {
-    return TaskModel.find({ projectId, deletedAt: null }).sort({ createdAt: -1 });
+    return TaskModel.find({ $or: [{ projectId }, { projectIds: projectId }], deletedAt: null }).sort({ createdAt: -1 });
   }
 
   public async listTasksByProjects(projectIds: Types.ObjectId[], filters: TaskFilters) {
-    return TaskModel.find({ projectId: { $in: projectIds }, deletedAt: null, ...filters }).sort({ createdAt: -1 });
+    return TaskModel.find({ $or: [{ projectId: { $in: projectIds } }, { projectIds: { $in: projectIds } }], deletedAt: null, ...filters }).sort({ createdAt: -1 });
+  }
+
+  public async addProjectLink(task: HydratedDocument<ITask.Model>, projectId: Types.ObjectId) {
+    const linked = [task.projectId, ...(task.projectIds ?? [])];
+    if (!linked.some((id) => id.equals(projectId))) {
+      task.projectIds = [...(task.projectIds ?? []), projectId];
+      await task.save();
+    }
+    return task;
+  }
+
+  public async removeProjectLink(task: HydratedDocument<ITask.Model>, projectId: Types.ObjectId) {
+    const linked = [task.projectId, ...(task.projectIds ?? [])];
+    if (!linked.some((id) => id.equals(projectId))) throw new AppError(404, "TASK_PROJECT_NOT_FOUND", "Task is not linked to this project");
+    if (linked.length <= 1) throw new AppError(400, "LAST_TASK_PROJECT", "A task must remain in at least one project");
+    if (task.projectId.equals(projectId)) {
+      const [nextPrimary, ...remaining] = task.projectIds ?? [];
+      task.projectId = nextPrimary;
+      task.projectIds = remaining;
+    } else {
+      task.projectIds = (task.projectIds ?? []).filter((id) => !id.equals(projectId));
+    }
+    await task.save();
+    return task;
   }
 
   public async getTask(workspaceId: Types.ObjectId, taskId: string) {
@@ -124,9 +148,22 @@ class TaskRepository {
   }
 
   public async softDeleteProjectTasks(projectId: Types.ObjectId) {
-    const tasks = await TaskModel.find({ projectId, deletedAt: null });
-    if (tasks.length) await TaskModel.updateMany({ projectId, deletedAt: null }, { $set: { deletedAt: new Date() } });
-    return tasks;
+    const primaryTasks = await TaskModel.find({ projectId, deletedAt: null });
+    const deletedTasks: typeof primaryTasks = [];
+    for (const task of primaryTasks) {
+      const [nextPrimary, ...remaining] = task.projectIds ?? [];
+      if (nextPrimary) {
+        task.projectId = nextPrimary;
+        task.projectIds = remaining;
+        await task.save();
+      } else {
+        task.deletedAt = new Date();
+        await task.save();
+        deletedTasks.push(task);
+      }
+    }
+    await TaskModel.updateMany({ projectIds: projectId, projectId: { $ne: projectId }, deletedAt: null }, { $pull: { projectIds: projectId } });
+    return deletedTasks;
   }
 
   public async unassignUserFromProject(projectId: Types.ObjectId, userId: Types.ObjectId) {

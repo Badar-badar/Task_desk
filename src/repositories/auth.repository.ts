@@ -1,6 +1,7 @@
 import { DecodedIdToken } from "firebase-admin/auth";
 import { User } from "../models/user.model";
 import { AppError } from "../utils/appError";
+import { invitationRepository } from "./invitation.repository";
 
 class AuthRepository{
 public async syncUser(decoded: DecodedIdToken, name?: string){
@@ -8,7 +9,7 @@ public async syncUser(decoded: DecodedIdToken, name?: string){
 
   const displayName = name?.trim() || decoded.name || decoded.email.split("@")[0];
 
-  return User.findOneAndUpdate(
+  const user = await User.findOneAndUpdate(
     { firebaseUid: decoded.uid },
     {
       $setOnInsert: { firebaseUid: decoded.uid, email: decoded.email, name: displayName },
@@ -16,6 +17,9 @@ public async syncUser(decoded: DecodedIdToken, name?: string){
     },
     { upsert: true, new: true, runValidators: true }
   );
+
+  await invitationRepository.acceptAllForUser(user._id, user.email);
+  return user;
 };
 }
 
