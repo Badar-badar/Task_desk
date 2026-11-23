@@ -59,7 +59,7 @@ class ProjectMemberRepository {
     const invitation = await InvitationModel.findOneAndUpdate(
       { projectId, email, status: "pending" },
       { $set: { role, invitedBy } },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
     );
 
     const [project, inviter] = await Promise.all([

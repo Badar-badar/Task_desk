@@ -15,7 +15,7 @@ public async syncUser(decoded: DecodedIdToken, name?: string){
       $setOnInsert: { firebaseUid: decoded.uid, email: decoded.email, name: displayName },
       $set: { lastLogin: new Date() },
     },
-    { upsert: true, new: true, runValidators: true }
+    { upsert: true, returnDocument: 'after', runValidators: true }
   );
 
   await invitationRepository.acceptAllForUser(user._id, user.email);

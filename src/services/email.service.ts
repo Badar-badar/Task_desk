@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 const esc = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
@@ -29,18 +29,29 @@ export const inviteEmail = ({ inviterName, projectName, role, link }: InviteEmai
 });
 
 export const sendInviteEmail = async (to: string, input: SendInviteEmailInput) => {
-  const { RESEND_API_KEY, MAIL_FROM, CLIENT_URL } = process.env;
-  if (!RESEND_API_KEY || !MAIL_FROM || !CLIENT_URL) {
-    throw new Error("Invitation email requires RESEND_API_KEY, MAIL_FROM, and CLIENT_URL");
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, CLIENT_URL } = process.env;
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM || !CLIENT_URL) {
+    throw new Error(
+      "Invitation email requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, and CLIENT_URL",
+    );
+  }
+
+  const port = Number(SMTP_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("SMTP_PORT must be a valid port number");
   }
 
   const message = inviteEmail({ ...input, link: CLIENT_URL.replace(/\/$/, "") });
-  const resend = new Resend(RESEND_API_KEY);
-  const { error } = await resend.emails.send({
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+
+  await transporter.sendMail({
     from: MAIL_FROM,
     to,
     ...message,
   });
-
-  if (error) throw new Error(`Failed to send invitation email: ${error.message}`);
 };

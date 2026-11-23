@@ -103,7 +103,7 @@ class TaskRepository {
     const task = await TaskModel.findOneAndUpdate(
       { _id: taskId, workspaceId, deletedAt: null },
       { $push: { attachments: { $each: attachments } } },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     if (!task) throw new AppError(404, "TASK_NOT_FOUND", "Task not found");
     return task;
@@ -112,7 +112,7 @@ class TaskRepository {
   public async removeAttachment(workspaceId: Types.ObjectId, taskId: string, attachmentId: string) {
     const task = await TaskModel.findOneAndUpdate(
       { _id: taskId, workspaceId, deletedAt: null, "attachments._id": attachmentId },
-      { $pull: { attachments: { _id: attachmentId } } }, { new: true },
+      { $pull: { attachments: { _id: attachmentId } } }, { returnDocument: 'after' },
     );
     if (!task) {
       const exists = await TaskModel.exists({ _id: taskId, workspaceId, deletedAt: null });
@@ -134,14 +134,14 @@ class TaskRepository {
     }
     const update: UpdateQuery<ITask.Model> = { $set: set };
     if (attachments.length) update.$push = { attachments: { $each: attachments } };
-    const task = await TaskModel.findOneAndUpdate({ _id: taskId, workspaceId, deletedAt: null }, update, { new: true, runValidators: true });
+    const task = await TaskModel.findOneAndUpdate({ _id: taskId, workspaceId, deletedAt: null }, update, { returnDocument: 'after', runValidators: true });
     if (!task) throw new AppError(404, "TASK_NOT_FOUND", "Task not found");
     return task;
   }
 
   public async deleteTask(workspaceId: Types.ObjectId, taskId: string) {
     const task = await TaskModel.findOneAndUpdate(
-      { _id: taskId, workspaceId, deletedAt: null }, { $set: { deletedAt: new Date() } }, { new: true },
+      { _id: taskId, workspaceId, deletedAt: null }, { $set: { deletedAt: new Date() } }, { returnDocument: 'after' },
     );
     if (!task) throw new AppError(404, "TASK_NOT_FOUND", "Task not found");
     return task;

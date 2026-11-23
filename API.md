@@ -25,7 +25,7 @@ This reference documents the HTTP API implemented by the Express routes, validat
 - JSON is expected unless an endpoint says `multipart/form-data`. IDs are MongoDB ObjectId strings. Date fields are coerced to JavaScript dates, normally supplied as ISO 8601 strings.
 - Request schemas marked strict reject unknown JSON/form fields. Optional fields omitted from an update are left unchanged; use `null` only where the endpoint explicitly accepts it to clear a field.
 - Uploads use multipart field `files`, up to 5 files per request and 10 MiB per file. Accepted MIME types: JPEG, PNG, WebP, PDF. Attachment responses include metadata plus a signed `url` expiring after one hour.
-- Project invitations are emailed through Resend. Configure `RESEND_API_KEY`, `MAIL_FROM`, and `CLIENT_URL`; the recipient joins by signing up with the invited email address.
+- Project invitations are emailed through Nodemailer over SMTP. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, and `CLIENT_URL`; the recipient joins by signing up with the invited email address.
 
 ### Roles and access
 
@@ -52,7 +52,7 @@ The server reads configuration from `.env` (never commit secret values):
 | `MONGO_URI` | MongoDB connection |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Firebase Admin token verification; private-key `\\n` sequences are converted to newlines |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 task attachment storage |
-| `RESEND_API_KEY`, `MAIL_FROM` | Resend invitation email delivery |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | SMTP connection and sender for Nodemailer invitation email delivery. Use the credentials and host provided by your email provider. Port 465 uses a secure TLS connection; other ports use SMTP with STARTTLS when supported by the server. |
 | `CLIENT_URL` | CORS origin and invitation email button destination; required when sending an invitation email |
 | `NODE_ENV` | Controls whether error responses include a stack (omitted only when exactly `production`) |
 

@@ -20,7 +20,7 @@ class InvitationRepository {
     const invitation = await InvitationModel.findOneAndUpdate(
       { _id: invitationId, projectId, status: "pending" },
       { $set: { role } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!invitation) throw new AppError(404, "INVITATION_NOT_FOUND", "Invitation not found");
     return invitation;
@@ -30,7 +30,7 @@ class InvitationRepository {
     const invitation = await InvitationModel.findOneAndUpdate(
       { _id: invitationId, projectId, status: "pending" },
       { $set: { status: "revoked" } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!invitation) throw new AppError(404, "INVITATION_NOT_FOUND", "Invitation not found");
     return invitation;

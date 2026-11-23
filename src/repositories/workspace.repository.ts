@@ -44,7 +44,7 @@ class WorkspaceRepository {
     const workspace = await WorkspaceModel.findOneAndUpdate(
       { _id: workspaceId, deletedAt: null },
       { $set: data },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     if (!workspace) throw new AppError(404, "WORKSPACE_NOT_FOUND", "Workspace not found");
     return workspace;

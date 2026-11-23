@@ -170,7 +170,7 @@ public async getMyProjectIds(workspaceId: Types.ObjectId, userId: Types.ObjectId
     const project = await ProjectModel.findByIdAndUpdate(
       projectId,
       { $set: changes },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
 
