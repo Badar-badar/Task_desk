@@ -6,7 +6,7 @@ import { ALL_ROLES } from "../models/enums";
 import projectMemberRouter from "./projectMember.routes";
 import { projectFavoriteRouter } from "./favourite.routes";
 import invitationRouter from "./invitation.routes";
-import { workspaceContext } from "../middlewares/workspaceAccess";
+import { workspaceContext, workspaceMemberOnly } from "../middlewares/workspaceAccess";
 
 
 import {
@@ -31,7 +31,7 @@ projectRouter.use(authenticate, workspaceContext());
 // list the projects where the user is a member
 projectRouter.get("/", getProjects);
 
-projectRouter.post("/", validate({ body: createProjectSchema }), create);
+projectRouter.post("/", validate({ body: createProjectSchema }), workspaceMemberOnly, create);
 
 projectRouter.use("/:projectId/members", projectMemberRouter);
 projectRouter.use("/:projectId/invitations", invitationRouter);

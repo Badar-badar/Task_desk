@@ -6,11 +6,17 @@ import { getFileUrl } from "../services/storage.service";
 export const getSummary = async (req: Request, res: Response) => {
   const workspaceId = req.workspaceId!;
   const user = req.user!;
-  const assignedOnly = false;
+  const projectIds = req.workspaceProjectScoped
+    ? await projectRepository.getMyProjectIds(workspaceId, user._id)
+    : null;
   const [projectCount, taskSummary, myTasks, recentProjects] = await Promise.all([
     projectRepository.countProjects(workspaceId, user._id),
-    taskRepository.getTaskSummary(workspaceId, assignedOnly ? user._id : undefined),
-    taskRepository.getMyOpenTasks(workspaceId, user._id),
+    projectIds
+      ? taskRepository.getTaskSummaryForProjects(workspaceId, projectIds)
+      : taskRepository.getTaskSummary(workspaceId),
+    projectIds
+      ? taskRepository.getMyOpenTasksForProjects(workspaceId, user._id, projectIds)
+      : taskRepository.getMyOpenTasks(workspaceId, user._id),
     projectRepository.getRecentProjects(workspaceId, user._id, 4),
   ]);
   const projectNames = await projectRepository.getProjectNames(workspaceId,

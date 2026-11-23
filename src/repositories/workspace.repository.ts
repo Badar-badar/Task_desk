@@ -3,6 +3,7 @@ import type { Types } from "mongoose";
 import { WorkspaceModel } from "../models/workspace.model";
 import { WorkspaceMemberModel } from "../models/workspaceMember.model";
 import { ProjectModel } from "../models/project.model";
+import { ProjectMemberModel } from "../models/projectMember.model";
 import { projectRepository } from "./project.repository";
 import { AppError } from "../utils/appError";
 
@@ -29,9 +30,24 @@ class WorkspaceRepository {
       .sort({ createdAt: 1 })
       .lean();
 
-    return rows
+    const workspaces = new Map<string, any>(rows
       .filter((row: any) => row.workspaceId)
-      .map((row: any) => ({ ...row.workspaceId, role: row.role }));
+      .map((row: any) => [row.workspaceId._id.toString(), { ...row.workspaceId, role: row.role }] as const));
+
+    const projectMemberships = await ProjectMemberModel.find({ userId }).select("projectId").lean();
+    if (projectMemberships.length) {
+      const projects = await ProjectModel.find({ _id: { $in: projectMemberships.map((membership) => membership.projectId) } })
+        .select("workspaceId")
+        .lean();
+      const workspaceIds = [...new Set(projects.map((project) => project.workspaceId.toString()))];
+      const guestWorkspaces = await WorkspaceModel.find({ _id: { $in: workspaceIds }, deletedAt: null }).lean();
+      for (const workspace of guestWorkspaces) {
+        const id = workspace._id.toString();
+        if (!workspaces.has(id)) workspaces.set(id, { ...workspace, role: "project_member" });
+      }
+    }
+
+    return [...workspaces.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 
   public async getWorkspace(workspaceId: Types.ObjectId, role: string) {

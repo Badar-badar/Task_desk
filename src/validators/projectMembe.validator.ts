@@ -17,7 +17,7 @@ export const memberParamsSchema = z.object({
 export const addMemberSchema = z
   .object({
     email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")),
-    role: z.enum(MEMBER_ROLES).default("editor"),
+    role: z.enum(MEMBER_ROLES).default("viewer"),
   })
   .strict();
 

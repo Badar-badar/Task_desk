@@ -94,9 +94,35 @@ class TaskRepository {
     return { total, done, overdue, statusBreakdown: Object.fromEntries(statusCounts.map(({ _id, count }) => [_id, count])) };
   }
 
-  public async getMyOpenTasks(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
-    return TaskModel.find({ workspaceId, assigneeId: userId, status: { $ne: "done" }, deletedAt: null })
-      .sort({ dueDate: 1, createdAt: -1 }).limit(6);
+  public async getTaskSummaryForProjects(workspaceId: Types.ObjectId, projectIds: Types.ObjectId[]) {
+    if (!projectIds.length) return { total: 0, done: 0, overdue: 0, statusBreakdown: {} };
+    const filter = {
+      workspaceId,
+      deletedAt: null,
+      $or: [{ projectId: { $in: projectIds } }, { projectIds: { $in: projectIds } }],
+    };
+    const now = new Date();
+    const [total, done, overdue, statusCounts] = await Promise.all([
+      TaskModel.countDocuments(filter),
+      TaskModel.countDocuments({ ...filter, status: "done" }),
+      TaskModel.countDocuments({ ...filter, status: { $ne: "done" }, dueDate: { $lt: now } }),
+      TaskModel.aggregate<{ _id: string; count: number }>([
+        { $match: filter },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+    ]);
+    return { total, done, overdue, statusBreakdown: Object.fromEntries(statusCounts.map(({ _id, count }) => [_id, count])) };
+  }
+
+  public async getMyOpenTasksForProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId, projectIds: Types.ObjectId[]) {
+    if (!projectIds.length) return [];
+    return TaskModel.find({
+      workspaceId,
+      $or: [{ projectId: { $in: projectIds } }, { projectIds: { $in: projectIds } }],
+      assigneeId: userId,
+      status: { $ne: "done" },
+      deletedAt: null,
+    }).sort({ dueDate: 1, createdAt: -1 }).limit(6);
   }
 
   public async addAttachments(workspaceId: Types.ObjectId, taskId: string, attachments: ITask.NewAttachment[]) {

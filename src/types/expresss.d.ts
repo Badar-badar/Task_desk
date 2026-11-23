@@ -19,6 +19,7 @@ declare global {
       workspace?: HydratedDocument<IWorkspace.PersistenceModel>;
       workspaceId?: Types.ObjectId;
       workspaceRole?: WorkspaceRole;
+      workspaceProjectScoped?: boolean;
       projectId?: Types.ObjectId;
       projectRole?: MemberRole;
       task?: HydratedDocument<ITask.Model>;

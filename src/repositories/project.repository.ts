@@ -48,7 +48,7 @@ public async listProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
   const projects = await ProjectModel.find({
     workspaceId,                                             
     _id: { $in: memberships.map((m) => m.projectId) },
-  }).sort({ createdAt: -1 }).lean();
+  }).sort({ createdAt: -1 }).populate("ownerId", "name email avatarUrl").lean();
 
     const withStats = await this.addTaskStats(projects);
     const withMembers = await this.addMembersPreview(withStats);
@@ -66,7 +66,7 @@ public async listProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
 
   
   public async getProject(projectId: Types.ObjectId, role: MemberRole, userId: Types.ObjectId) {
-    const project = await ProjectModel.findById(projectId).lean();
+    const project = await ProjectModel.findById(projectId).populate("ownerId", "name email avatarUrl").lean();
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
 
     const [withStats] = await this.addTaskStats([project]);
@@ -138,7 +138,7 @@ public async getMyProjectIds(workspaceId: Types.ObjectId, userId: Types.ObjectId
     const rows = await ProjectMemberModel.find({
       projectId: { $in: projects.map((p) => p._id) },
     })
-      .populate("userId", "name avatarUrl")
+      .populate("userId", "name email avatarUrl")
       .lean();
 
     const byProject = new Map<string, any[]>();
