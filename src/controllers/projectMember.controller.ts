@@ -4,6 +4,7 @@ import { AppError } from "../utils/appError";
 import type { MemberRole } from "../models/enums";
 import { Types } from "mongoose";
 import { sendInviteEmail } from "../services/email.service";
+import { redisCacheService } from "../services/redisCache.service";
 
 export const list = async (req: Request, res: Response) => {
   const members = await projectMemberRepository.listMembers(req.projectId!);
@@ -19,6 +20,9 @@ export const add = async (req: Request, res: Response) => {
     email,
     role,
   );
+  if (!result.invited) {
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+  }
 
   if (result.invited) {
     try {
@@ -54,6 +58,7 @@ export const updateRole = async (req: Request, res: Response) => {
     req.params.userId as string,
     (req.body as { role: MemberRole }).role,
   );
+  await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
   res.status(200).json({ success: true, data: member });
 };
 
@@ -67,6 +72,7 @@ export const remove = async (req: Request, res: Response) => {
   }
 
   await projectMemberRepository.removeMember(req.projectId!, userId);
+  await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
   res.status(200).json({
     success: true,
     message: isSelf ? "You left the project" : "Member removed successfully",

@@ -39,9 +39,8 @@ class InvitationRepository {
   // called from /auth/sync: turn every pending invitation for this email into a membership
   public async acceptAllForUser(userId: Types.ObjectId, email: string) {
     const pending = await InvitationModel.find({ email, status: "pending" });
-    if (!pending.length) return 0;
+    if (!pending.length) return [];
 
-    let accepted = 0;
     for (const invitation of pending) {
       // skip if already a member, but still close the invitation
       await ProjectMemberModel.updateOne(
@@ -53,9 +52,8 @@ class InvitationRepository {
       invitation.status = "accepted";
       invitation.acceptedAt = new Date();
       await invitation.save();
-      accepted += 1;
     }
-    return accepted;
+    return pending.map((invitation) => invitation.projectId);
   }
 }
 

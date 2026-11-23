@@ -14,6 +14,7 @@ import {
 } from "../services/taskAttachment.service";
 import { getFileUrl } from "../services/storage.service";
 import { AppError } from "../utils/appError";
+import { redisCacheService } from "../services/redisCache.service";
 
 const serializeTask = async (task: HydratedDocument<ITask.Model>) => {
   const data = task.toObject();
@@ -85,6 +86,8 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
       }
     }
 
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+
     res.status(201).json({
       success: true,
       message: "Task created successfully",
@@ -97,9 +100,19 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
 
 export const listTasks = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const workspaceId = req.workspaceId!.toString();
+    const userId = req.user!._id.toString();
+    const scope = `project:${req.projectId!.toString()}`;
+    const key = redisCacheService.taskListKey(workspaceId, userId, scope);
+    const cached = await redisCacheService.get<unknown[]>(key);
+    if (cached) {
+      res.status(200).json({ success: true, data: cached });
+      return;
+    }
     const tasks = await taskRepository.listTasks(req.projectId!);
-
-    res.status(200).json({ success: true, data: await Promise.all(tasks.map(serializeTask)) });
+    const data = await Promise.all(tasks.map(serializeTask));
+    await redisCacheService.set(key, data, redisCacheService.listTtlSeconds);
+    res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -113,6 +126,22 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
       assigneeId?: string;
       status?: ITask.Model["status"];
     };
+
+    const scope = `all:${JSON.stringify({
+      projectId: query.projectId ?? null,
+      assigneeId: query.assigneeId ?? null,
+      status: query.status ?? null,
+    })}`;
+    const cacheKey = redisCacheService.taskListKey(
+      req.workspaceId!.toString(),
+      req.user!._id.toString(),
+      scope,
+    );
+    const cached = await redisCacheService.get<unknown[]>(cacheKey);
+    if (cached) {
+      res.status(200).json({ success: true, data: cached });
+      return;
+    }
 
     // only projects in the active workspace where I am a member
     let projectIds = await projectRepository.getMyProjectIds(req.workspaceId!, req.user!._id);
@@ -130,7 +159,9 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
         })
       : [];
 
-    res.status(200).json({ success: true, data: await Promise.all(tasks.map(serializeTask)) });
+    const data = await Promise.all(tasks.map(serializeTask));
+    await redisCacheService.set(cacheKey, data, redisCacheService.listTtlSeconds);
+    res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -146,6 +177,7 @@ export const addTaskProject = async (req: Request, res: Response, next: NextFunc
     if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to add tasks to this project");
 
     const task = await taskRepository.addProjectLink(req.task!, projectId);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
     res.status(200).json({ success: true, data: await serializeTask(task) });
   } catch (error) { next(error); }
 };
@@ -158,6 +190,7 @@ export const removeTaskProject = async (req: Request, res: Response, next: NextF
     if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to remove tasks from this project");
 
     const task = await taskRepository.removeProjectLink(req.task!, projectId);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
     res.status(200).json({ success: true, data: await serializeTask(task) });
   } catch (error) { next(error); }
 };
@@ -186,6 +219,7 @@ export const updateTask = async (req: Request, res: Response, next: NextFunction
     }
 
     const task = await updateTaskWithAttachments(req.workspaceId!, taskId, updates, files);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
 
     res.status(200).json({
       success: true,
@@ -205,6 +239,7 @@ export const addTaskAttachments = async (req: Request, res: Response, next: Next
       throw new AppError(400, "NO_FILES", "Select at least one file to upload");
     }
     const task = await uploadTaskAttachments(req.workspaceId!, taskId, files);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
 
     res.status(201).json({
       success: true,
@@ -221,6 +256,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
     const taskId = getParamString(req.params.taskId);
     const attachmentId = getParamString(req.params.attachmentId);
     const task = await removeTaskAttachment(req.workspaceId!, taskId, attachmentId);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
 
     res.status(200).json({
       success: true,
@@ -235,6 +271,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
 export const deleteTask = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await deleteTaskWithAttachments(req.workspaceId!, getParamString(req.params.taskId));
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
 
     res.status(200).json({ success: true, message: "Task deleted successfully" });
   } catch (error) {

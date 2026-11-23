@@ -2,6 +2,8 @@ import { DecodedIdToken } from "firebase-admin/auth";
 import { User } from "../models/user.model";
 import { AppError } from "../utils/appError";
 import { invitationRepository } from "./invitation.repository";
+import { ProjectModel } from "../models/project.model";
+import { redisCacheService } from "../services/redisCache.service";
 
 class AuthRepository{
 public async syncUser(decoded: DecodedIdToken, name?: string){
@@ -18,7 +20,16 @@ public async syncUser(decoded: DecodedIdToken, name?: string){
     { upsert: true, returnDocument: 'after', runValidators: true }
   );
 
-  await invitationRepository.acceptAllForUser(user._id, user.email);
+  const projectIds = await invitationRepository.acceptAllForUser(user._id, user.email);
+  if (projectIds.length) {
+    const projects = await ProjectModel.find({ _id: { $in: projectIds } })
+      .select("workspaceId")
+      .lean();
+    await Promise.all(
+      [...new Set(projects.map((project) => project.workspaceId.toString()))]
+        .map((workspaceId) => redisCacheService.invalidateWorkspaceLists(workspaceId)),
+    );
+  }
   return user;
 };
 }
