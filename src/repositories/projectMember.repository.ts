@@ -1,52 +1,56 @@
-import type { Types } from "mongoose";
-import type { MemberRole } from "../models/enums";
-import { ProjectMemberModel } from "../models/projectMember.model";
-import { InvitationModel } from "../models/invitation.model";
-import { FavoriteModel } from "../models/favourite";
-import { User } from "../models/user.model";
-import { ProjectModel } from "../models/project.model";
+import { prisma } from "../config/db";
 import { taskRepository } from "./task.repository";
 import { AppError } from "../utils/appError";
+import type { MemberRole } from "../models/enums";
 
-const serialize = (row: any) => ({
-  _id: row.userId._id,
-  name: row.userId.name,
-  email: row.userId.email,
-  avatarUrl: row.userId.avatarUrl,
+const userSelect = { select: { id: true, name: true, email: true, avatarUrl: true } };
+
+const serialize = (row: {
+  role: MemberRole;
+  createdAt: Date;
+  user: { id: string; name: string; email: string; avatarUrl: string | null };
+}) => ({
+  id: row.user.id,
+  name: row.user.name,
+  email: row.user.email,
+  avatarUrl: row.user.avatarUrl,
   role: row.role,
   joinedAt: row.createdAt,
 });
 
 class ProjectMemberRepository {
-  public async listMembers(projectId: Types.ObjectId) {
-    const rows = await ProjectMemberModel.find({ projectId })
-      .populate("userId", "name email avatarUrl")
-      .sort({ createdAt: 1 })
-      .lean();
+  public async listMembers(projectId: string) {
+    const rows = await prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: userSelect },
+      orderBy: { createdAt: "asc" },
+    });
 
-    return rows.filter((row: any) => row.userId).map(serialize);
+    return rows.map(serialize);
   }
 
   // existing user -> member now, unknown email -> pending invitation
-  public async addMember(
-    projectId: Types.ObjectId,
-    invitedBy: Types.ObjectId,
-    email: string,
-    role: MemberRole,
-  ) {
-    const user = await User.findOne({ email, isActive: true }).select("_id name email avatarUrl");
+  public async addMember(projectId: string, invitedBy: string, email: string, role: MemberRole) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    const user = await prisma.user.findFirst({
+      where: { email: cleanEmail, isActive: true },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
 
     if (user) {
-      const exists = await ProjectMemberModel.exists({ projectId, userId: user._id });
+      const exists = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId: user.id } },
+      });
       if (exists) {
         throw new AppError(409, "ALREADY_MEMBER", "This user is already a member of the project");
       }
 
-      await ProjectMemberModel.create({ projectId, userId: user._id, role });
+      await prisma.projectMember.create({ data: { projectId, userId: user.id, role } });
       return {
         invited: false as const,
         member: {
-          _id: user._id,
+          id: user.id,
           name: user.name,
           email: user.email,
           avatarUrl: user.avatarUrl,
@@ -56,15 +60,22 @@ class ProjectMemberRepository {
     }
 
     // one pending invitation per project + email: update the role if it exists
-    const invitation = await InvitationModel.findOneAndUpdate(
-      { projectId, email, status: "pending" },
-      { $set: { role, invitedBy } },
-      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
-    );
+    const existing = await prisma.invitation.findFirst({
+      where: { projectId, email: cleanEmail, status: "pending" },
+    });
+
+    const invitation = existing
+      ? await prisma.invitation.update({
+          where: { id: existing.id },
+          data: { role, invitedBy },
+        })
+      : await prisma.invitation.create({
+          data: { projectId, email: cleanEmail, role, invitedBy },
+        });
 
     const [project, inviter] = await Promise.all([
-      ProjectModel.findById(projectId).select("name").lean(),
-      User.findById(invitedBy).select("name").lean(),
+      prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: invitedBy }, select: { name: true } }),
     ]);
 
     if (!project || !inviter) {
@@ -79,38 +90,43 @@ class ProjectMemberRepository {
     };
   }
 
-  public async updateRole(projectId: Types.ObjectId, userId: string, role: MemberRole) {
-    const member = await ProjectMemberModel.findOne({ projectId, userId });
+  public async updateRole(projectId: string, userId: string, role: MemberRole) {
+    const member = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+    });
     if (!member) throw new AppError(404, "MEMBER_NOT_FOUND", "Member not found");
 
     if (member.role === "admin" && role !== "admin") {
       await this.assertNotLastAdmin(projectId);
     }
 
-    member.role = role;
-    await member.save();
-
-    const populated = await member.populate("userId", "name email avatarUrl");
-    return serialize(populated);
+    const updated = await prisma.projectMember.update({
+      where: { id: member.id },
+      data: { role },
+      include: { user: userSelect },
+    });
+    return serialize(updated);
   }
 
-  public async removeMember(projectId: Types.ObjectId, userId: string) {
-    const member = await ProjectMemberModel.findOne({ projectId, userId });
+  public async removeMember(projectId: string, userId: string) {
+    const member = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+    });
     if (!member) throw new AppError(404, "MEMBER_NOT_FOUND", "Member not found");
 
     if (member.role === "admin") {
       await this.assertNotLastAdmin(projectId);
     }
 
-    await ProjectMemberModel.deleteOne({ _id: member._id });
+    await prisma.projectMember.delete({ where: { id: member.id } });
     await Promise.all([
-      FavoriteModel.deleteMany({ projectId, userId }),
+      prisma.favorite.deleteMany({ where: { projectId, userId } }),
       taskRepository.unassignUserFromProject(projectId, member.userId),
     ]);
   }
 
-  private async assertNotLastAdmin(projectId: Types.ObjectId) {
-    const admins = await ProjectMemberModel.countDocuments({ projectId, role: "admin" });
+  private async assertNotLastAdmin(projectId: string) {
+    const admins = await prisma.projectMember.count({ where: { projectId, role: "admin" } });
     if (admins <= 1) {
       throw new AppError(
         400,

@@ -1,6 +1,6 @@
 # Task Desk API Reference
 
-This reference documents the HTTP API implemented by the Express routes, validators, controllers, models, and repositories in `src/`. The API base path is `/api/v1`; endpoint paths below omit that prefix. MongoDB ObjectIds are represented as 24-character hexadecimal strings.
+This reference documents the HTTP API implemented by the Express routes, validators, controllers, models, and repositories in `src/`. The API base path is `/api/v1`; endpoint paths below omit that prefix. Database IDs are UUID strings.
 
 ## Quick reference
 
@@ -19,10 +19,10 @@ This reference documents the HTTP API implemented by the Express routes, validat
 ## Conventions
 
 - The server listens on `PORT`; health is `GET /api/v1/health`.
-- Protected routes use `Authorization: Bearer <Firebase ID token>`. `authenticate` verifies the Firebase token, loads the local user, and requires `isActive`. Call `POST /auth/sync` before other protected routes for a new user.
-- Project and task routes also require `x-workspace-id: <workspace ObjectId>`. The user must be a member of that active workspace. `/workspace/:workspaceId/...` routes take the workspace ID in the path.
+- Protected routes use `Authorization: Bearer <Firebase ID token>`. `authenticate` verifies the Firebase token, loads the local user (creating it through the same sync flow if it is missing), and requires `isActive`. The frontend may still call `POST /auth/sync` explicitly after login or signup.
+- Project and task routes also require `x-workspace-id: <workspace UUID>`. The user must be a member of that active workspace. `/workspace/:workspaceId/...` routes take the workspace ID in the path.
 - Project role is one of `admin`, `editor`, `commenter`, or `viewer`. Workspace role is `owner` or `member`. Task access generally follows the project role; the assigned user is additionally allowed to update only task status and to manage task attachments.
-- JSON is expected unless an endpoint says `multipart/form-data`. IDs are MongoDB ObjectId strings. Date fields are coerced to JavaScript dates, normally supplied as ISO 8601 strings.
+- JSON is expected unless an endpoint says `multipart/form-data`. Resource IDs are UUID strings. Date fields are coerced to JavaScript dates, normally supplied as ISO 8601 strings.
 - Request schemas marked strict reject unknown JSON/form fields. Optional fields omitted from an update are left unchanged; use `null` only where the endpoint explicitly accepts it to clear a field.
 - Uploads use multipart field `files`, up to 5 files per request and 10 MiB per file. Accepted MIME types: JPEG, PNG, WebP, PDF. Attachment responses include metadata plus a signed `url` expiring after one hour.
 - Project invitations are emailed through Nodemailer over SMTP. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, and `CLIENT_URL`; the recipient joins by signing up with the invited email address.
@@ -49,7 +49,8 @@ The server reads configuration from `.env` (never commit secret values):
 | Variable | Used for |
 | --- | --- |
 | `PORT` | HTTP listen port |
-| `MONGO_URI` | MongoDB connection |
+| `DATABASE_URL` | PostgreSQL connection string used by Prisma |
+| `REDIS_URL` | Optional Redis connection for response caching; caching is disabled when unset or unavailable |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Firebase Admin token verification; private-key `\\n` sequences are converted to newlines |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 task attachment storage |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | SMTP connection and sender for Nodemailer invitation email delivery. Use the credentials and host provided by your email provider. Port 465 uses a secure TLS connection; other ports use SMTP with STARTTLS when supported by the server. |
@@ -62,17 +63,17 @@ Errors handled by the shared error middleware have shape `{ "success": false, "m
 
 ### `GET /health`
 
-No auth. Returns `200` `{ "status": "ok", "app": "Task Desk", "db": "connected" }`; `db` is `connected` or `disconnected`.
+No auth. Returns `200` with `status: "ok"` when the database is reachable, or `503` with `status: "error"` when it is not. The response includes `app: "Task Desk"` and `db: "connected" | "disconnected"`.
 
 ### `POST /auth/sync`
 
 Requires a valid Firebase bearer token; does not require an existing local user. Optional strict JSON body: `{ "name": "string" }` (trimmed, 1–100 chars). Creates a local user if needed and updates `lastLogin`; the supplied name is used only on first creation. Applies pending project invitations matching the account email and creates project memberships using each invitation's role.
 
-Returns `200` `{ "success": true, "user": <user document> }`. User fields include `_id`, `firebaseUid`, `name`, `email`, `isActive`, optional `lastLogin`, `workspaceId`, `role`, and timestamps. Errors: `400` invalid body or Firebase account without email; `401` invalid/missing token; `500` unexpected error.
+Returns `200` `{ "success": true, "user": <user record> }`. User fields include `id`, `firebaseUid`, `name`, `email`, `isActive`, optional `lastLogin`, `workspaceId`, `role`, and timestamps. Errors: `400` invalid body or Firebase account without email; `401` invalid/missing token; `500` unexpected error.
 
 ### `GET /auth/me`
 
-Requires an active, synced Firebase user; no workspace required. Returns `200` `{ "success": true, "user": <user document> }`. Errors: `401` missing/invalid token or local user; `403` deactivated user.
+Requires an active, synced Firebase user; no workspace required. Returns `200` `{ "success": true, "user": <user record> }`. Errors: `401` missing/invalid token or local user; `403` deactivated user.
 
 ## Workspaces
 
@@ -82,7 +83,7 @@ Authenticated user. Strict JSON body `{ "name": "string" }`, trimmed, 2–120 ch
 
 ### `GET /workspace`
 
-Lists the caller's non-deleted workspaces, ordered by membership creation time. Returns `200` `{ "success": true, "data": [<workspace fields plus role>] }`. Workspace fields include `_id`, `name`, generated unique `slug`, `ownerId`, timestamps, and `deletedAt`.
+Lists the caller's non-deleted workspaces, ordered by membership creation time. Returns `200` `{ "success": true, "data": [<workspace fields plus role>] }`. Workspace fields include `id`, `name`, generated unique `slug`, `ownerId`, timestamps, and `deletedAt`.
 
 ### `GET /workspace/:workspaceId`
 
@@ -98,7 +99,7 @@ Owner only. Deletes workspace projects, project data and task attachments, remov
 
 ### `GET /workspace/:workspaceId/members`
 
-Any workspace member. Returns `200` with members ordered oldest first. A member has `_id`, `name`, `email`, optional `avatarUrl`, `role` (`owner` or `member`) and `joinedAt`.
+Any workspace member. Returns `200` with members ordered oldest first. A member has `id`, `name`, `email`, optional `avatarUrl`, `role` (`owner` or `member`) and `joinedAt`.
 
 ### `POST /workspace/:workspaceId/members`
 
@@ -114,7 +115,7 @@ All `/project` routes require authentication and `x-workspace-id` for an active 
 
 ### `GET /project`
 
-Returns projects in the active workspace where caller is a project member, newest first. Each result includes project model fields (`_id`, `workspaceId`, `name`, optional `description`, `status`, optional `startDate`/`endDate`, `color`, `ownerId`, timestamps), caller `role`, `isFavorite`, `taskStats: { total, done }`, up to 3 `members`, and `memberCount`.
+Returns projects in the active workspace where caller is a project member, newest first. Each result includes project model fields (`id`, `workspaceId`, `name`, optional `description`, `status`, optional `startDate`/`endDate`, `color`, `ownerId`, timestamps), caller `role`, `isFavorite`, `taskStats: { total, done }`, up to 3 `members`, and `memberCount`.
 
 ### `POST /project`
 
@@ -145,7 +146,7 @@ Project `admin` only. Deletes the project and associated comments, invitations, 
 
 ### `GET /project/:projectId/members`
 
-Any project member. Returns members oldest first: `_id`, `name`, `email`, optional `avatarUrl`, `role`, `joinedAt`.
+Any project member. Returns members oldest first: `id`, `name`, `email`, optional `avatarUrl`, `role`, `joinedAt`.
 
 ### `POST /project/:projectId/members`
 
@@ -177,17 +178,17 @@ Any project member. Toggles caller's favorite state. Returns `200` `{ "success":
 
 ### `GET /favorite`
 
-Requires authentication; returns the caller's still-accessible favorite projects, ordered most recently favorited first. Project fields selected are `_id`, `name`, `color`, and `status`; envelope is `{ "success": true, "data": [...] }`.
+Requires authentication; returns the caller's still-accessible favorite projects, ordered most recently favorited first. Project fields selected are `id`, `name`, `color`, and `status`; envelope is `{ "success": true, "data": [...] }`.
 
 ## Tasks and attachments
 
 Task routes require authentication and `x-workspace-id`. A caller must be a member of the task's project. Project `admin` and `editor` can create/update/delete tasks and manage attachments. A task assignee may update only `status` and add/remove attachments. `commenter` and `viewer` can read tasks.
 
-Task fields: `_id`, `projectId`, `workspaceId`, `title`, optional `description`, `status`, `priority`, `assigneeId`, `dueDate`, `completedAt`, `attachments`, `createdBy`, `deletedAt`, `createdAt`, `updatedAt`. Defaults: `todo`, `medium`, null assignee/date/completion/deletion, empty attachments. `completedAt` is managed by server status transitions; client input is discarded. Assignees must be active project members. Attachment object has `_id`, `key`, `fileName`, `mimeType`, `size`, and signed `url`.
+Task fields: `id`, `projectId`, `workspaceId`, `title`, optional `description`, `status`, `priority`, `assigneeId`, `dueDate`, `completedAt`, `attachments`, `createdBy`, `deletedAt`, `createdAt`, `updatedAt`. Defaults: `todo`, `medium`, null assignee/date/completion/deletion, empty attachments. `completedAt` is managed by server status transitions; client input is discarded. Assignees must be active project members. Attachment object has `id`, `key`, `fileName`, `mimeType`, `size`, and signed `url`.
 
 ### `GET /task`
 
-Lists non-deleted tasks across caller's projects in the selected workspace, newest first. Optional strict query parameters: `projectId` (ObjectId), `assigneeId` (ObjectId or literal `me`), `status` (`todo|in_progress|in_review|done`). Returns `{ "success": true, "data": [...] }`.
+Lists non-deleted tasks across caller's projects in the selected workspace, newest first. Optional strict query parameters: `projectId` (UUID), `assigneeId` (UUID or literal `me`), `status` (`todo|in_progress|in_review|done`). Returns `{ "success": true, "data": [...] }`.
 
 ### `GET /task/project/:projectId`
 
@@ -195,7 +196,7 @@ Any project member. Lists non-deleted project tasks, newest first, with signed a
 
 ### `POST /task/project/:projectId`
 
-Project `admin` or `editor`. Accepts JSON or multipart form with strict fields: `title` required (trimmed, 2–120 chars), optional `description` (trimmed, max 1,000), `status` (`todo|in_progress|in_review|done`), `priority` (`low|medium|high`), `assigneeId` (ObjectId, empty string or `null` to unassign), `dueDate` (date; JSON `null` clears it on update), and optional `files` (multipart only). `completedAt` is accepted but discarded. Returns `201` `{ success, message: "Task created successfully", data: <task> }`.
+Project `admin` or `editor`. Accepts JSON or multipart form with strict fields: `title` required (trimmed, 2–120 chars), optional `description` (trimmed, max 1,000), `status` (`todo|in_progress|in_review|done`), `priority` (`low|medium|high`), `assigneeId` (UUID, empty string or `null` to unassign), `dueDate` (date; JSON `null` clears it on update), and optional `files` (multipart only). `completedAt` is accepted but discarded. Returns `201` `{ success, message: "Task created successfully", data: <task> }`.
 
 ### `GET /task/:taskId`
 

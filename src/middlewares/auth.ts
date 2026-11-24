@@ -1,7 +1,8 @@
 import { AppError } from "../utils/appError";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { firebaseAuth } from "../config/firebase.js";
-import { User } from "../models/user.model.js";
+import { prisma } from "../config/db.js";
+import { authRepository } from "../repositories/auth.repository";
 
 export const verifyToken = asyncHandler(async (req, _res, next) => {
   const header = req.headers.authorization;
@@ -26,10 +27,14 @@ export const verifyToken = asyncHandler(async (req, _res, next) => {
 
 
 export const loadUser = asyncHandler(async (req, _res, next) => {
-  const user = await User.findOne({ firebaseUid: req.firebaseUser!.uid });
+  let user = await prisma.user.findUnique({
+    where: { firebaseUid: req.firebaseUser!.uid },
+  });
 
   if (!user) {
-    throw new AppError(401, "API_ERROR", "Call /api/v1/auth/sync first");
+    // Firebase verification succeeded, so safely create the corresponding local user.
+    // This also prevents a first-request race with the frontend's explicit /auth/sync call.
+    user = await authRepository.syncUser(req.firebaseUser!);
   }
   if (!user.isActive) {
     throw new AppError(403, "API_ERROR", "User is deactivated. Please request activation");

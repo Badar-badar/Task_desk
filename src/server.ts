@@ -1,8 +1,5 @@
 import app from './app';
 import {connectDB, disconnectDB} from './config/db'
-import dotenv from "dotenv";
-
-dotenv.config();
 const start = async() =>{
     try {
         await connectDB();
@@ -11,7 +8,7 @@ const start = async() =>{
         console.log(`server is running on http://localhost:${process.env.PORT}`);
 
         const shutdown = async(signal: string):Promise<void> =>{
-            console.log(`{signal} received. shutting down ...`);
+            console.log(`${signal} received. shutting down ...`);
             server.close(async() =>{
                 await disconnectDB();
                 process.exit(0);

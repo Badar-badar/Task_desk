@@ -1,14 +1,12 @@
 
-import type { Types } from "mongoose";
 import type { WorkspaceRole } from "../models/enums";
 
 export namespace IWorkspace {
   export interface Model {
-    _id: Types.ObjectId;
+    id: string;
     name: string;
     slug: string;
-    description?: string;
-    ownerId: Types.ObjectId;
+    ownerId: string;
     deletedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -16,12 +14,10 @@ export namespace IWorkspace {
 
   export interface CreateObj {
     name: string;
-    description?: string;
   }
 
   export interface UpdateObj {
     name?: string;
-    description?: string;
   }
 
   export interface AddMemberObj {
@@ -34,10 +30,10 @@ export namespace IWorkspace {
   }
 
   export interface Member {
-    _id: Types.ObjectId;
+    id: string;
     name: string;
     email: string;
-    avatarUrl?: string;
+    avatarUrl?: string | null;
     role: WorkspaceRole;
     createdAt: Date;
   }

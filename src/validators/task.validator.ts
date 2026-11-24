@@ -1,15 +1,11 @@
 import type { RequestHandler } from "express";
-import mongoose from "mongoose";
 import { z } from "zod";
 import { AppError } from "../utils/appError";
 import { TASK_PRIORITIES, TASK_STATUSES } from "../models/enums";
 
 const assigneeIdSchema = z.preprocess(
   (value) => value === "" || value === "null" ? null : value,
-  z.union([
-    z.string(),
-    z.null(),
-  ]),
+  z.union([z.uuid(), z.null()]),
 );
 
 const taskBodySchema = z.object({
@@ -30,40 +26,32 @@ export const updateTaskSchema = taskBodySchema.partial().transform(({ completedA
   });
 
 export const projectTasksSchema = z.object({
-  projectId: z.string().refine(mongoose.isValidObjectId, {
-    message: "Invalid project ID",
-  }),
+  projectId: z.uuid({ error: "Invalid project ID" }),
 });
 
 export const taskIdSchema = z.object({
-  taskId: z.string().refine(mongoose.isValidObjectId, {
-    message: "Invalid task ID",
-  }),
+  taskId: z.uuid({ error: "Invalid task ID" }),
 });
 
 export const taskProjectLinkBodySchema = z.object({
-  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID"),
+  projectId: z.uuid({ error: "Invalid project ID" }),
 }).strict();
 
 export const taskProjectParamsSchema = z.object({
-  taskId: z.string().refine(mongoose.isValidObjectId, "Invalid task ID"),
-  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID"),
+  taskId: z.uuid({ error: "Invalid task ID" }),
+  projectId: z.uuid({ error: "Invalid project ID" }),
 });
 
 export const taskAttachmentIdSchema = z.object({
-  taskId: z.string().refine(mongoose.isValidObjectId, {
-    message: "Invalid task ID",
-  }),
-  attachmentId: z.string().refine(mongoose.isValidObjectId, {
-    message: "Invalid attachment ID",
-  }),
+  taskId: z.uuid({ error: "Invalid task ID" }),
+  attachmentId: z.uuid({ error: "Invalid attachment ID" }),
 });
 
 export const taskListQuerySchema = z.object({
-  projectId: z.string().refine(mongoose.isValidObjectId, "Invalid project ID").optional(),
+  projectId: z.uuid({ error: "Invalid project ID" }).optional(),
   assigneeId: z.union([
     z.literal("me"),
-    z.string().refine(mongoose.isValidObjectId, "Invalid assignee ID"),
+    z.uuid({ error: "Invalid assignee ID" }),
   ]).optional(),
   status: z.enum(TASK_STATUSES).optional(),
 }).strict();

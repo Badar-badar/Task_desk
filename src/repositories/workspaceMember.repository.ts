@@ -1,61 +1,69 @@
-import type { Types } from "mongoose";
-import { WorkspaceMemberModel } from "../models/workspaceMember.model";
-import { ProjectModel } from "../models/project.model";
-import { ProjectMemberModel } from "../models/projectMember.model";
-import { FavoriteModel } from "../models/favourite";
-import { User } from "../models/user.model";
+import { prisma } from "../config/db";
 import { taskRepository } from "./task.repository";
 import { AppError } from "../utils/appError";
 
 class WorkspaceMemberRepository {
-  public async listMembers(workspaceId: Types.ObjectId) {
-    const rows = await WorkspaceMemberModel.find({ workspaceId })
-      .populate("userId", "name email avatarUrl")
-      .sort({ createdAt: 1 })
-      .lean();
+  public async listMembers(workspaceId: string) {
+    const rows = await prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+      orderBy: { createdAt: "asc" },
+    });
 
-    return rows
-      .filter((r: any) => r.userId)
-      .map((r: any) => ({
-        _id: r.userId._id,
-        name: r.userId.name,
-        email: r.userId.email,
-        avatarUrl: r.userId.avatarUrl,
-        role: r.role,
-        joinedAt: r.createdAt,
-      }));
+    return rows.map((r) => ({
+      id: r.user.id,
+      name: r.user.name,
+      email: r.user.email,
+      avatarUrl: r.user.avatarUrl,
+      role: r.role,
+      joinedAt: r.createdAt,
+    }));
   }
 
   // role is always "member"
-  public async addMember(workspaceId: Types.ObjectId, email: string) {
-    const user = await User.findOne({ email, isActive: true }).select("_id name email avatarUrl");
+  public async addMember(workspaceId: string, email: string) {
+    const user = await prisma.user.findFirst({
+      where: { email: email.trim().toLowerCase(), isActive: true },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
     if (!user) {
       throw new AppError(404, "USER_NOT_FOUND", "User must sign up before joining a workspace");
     }
 
-    const exists = await WorkspaceMemberModel.exists({ workspaceId, userId: user._id });
+    const exists = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: user.id } },
+    });
     if (exists) throw new AppError(409, "ALREADY_MEMBER", "This user is already in the workspace");
 
-    await WorkspaceMemberModel.create({ workspaceId, userId: user._id, role: "member" });
-    return { _id: user._id, name: user.name, email: user.email, avatarUrl: user.avatarUrl, role: "member" };
+    await prisma.workspaceMember.create({
+      data: { workspaceId, userId: user.id, role: "member" },
+    });
+    return { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl, role: "member" };
   }
 
-  public async removeMember(workspaceId: Types.ObjectId, userId: string) {
-    const member = await WorkspaceMemberModel.findOne({ workspaceId, userId });
+  public async removeMember(workspaceId: string, userId: string) {
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
     if (!member) throw new AppError(404, "MEMBER_NOT_FOUND", "Member not found");
     if (member.role === "owner") {
       throw new AppError(400, "OWNER_CANNOT_LEAVE", "The workspace owner cannot be removed");
     }
 
     // clean up everything this user had inside the workspace
-    const projects = await ProjectModel.find({ workspaceId }).select("_id").lean();
-    for (const project of projects) {
-      await ProjectMemberModel.deleteOne({ projectId: project._id, userId });
-      await FavoriteModel.deleteOne({ projectId: project._id, userId });
-      await taskRepository.unassignUserFromProject(project._id, member.userId);
+    const projects = await prisma.project.findMany({
+      where: { workspaceId },
+      select: { id: true },
+    });
+    const projectIds = projects.map((p) => p.id);
+
+    await prisma.projectMember.deleteMany({ where: { userId, projectId: { in: projectIds } } });
+    await prisma.favorite.deleteMany({ where: { userId, projectId: { in: projectIds } } });
+    for (const projectId of projectIds) {
+      await taskRepository.unassignUserFromProject(projectId, userId);
     }
 
-    await WorkspaceMemberModel.deleteOne({ _id: member._id });
+    await prisma.workspaceMember.delete({ where: { id: member.id } });
   }
 }
 

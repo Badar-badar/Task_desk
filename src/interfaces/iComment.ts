@@ -1,11 +1,9 @@
-import type { Types } from "mongoose";
-
 export namespace IComment {
   export interface Model {
-    _id: Types.ObjectId;
-    taskId: Types.ObjectId;
-    projectId: Types.ObjectId;
-    authorId: Types.ObjectId;
+    id: string;
+    taskId: string;
+    projectId: string;
+    authorId: string;
     body: string;
     deletedAt?: Date | null;
     createdAt: Date;
@@ -13,9 +11,9 @@ export namespace IComment {
   }
 
   export interface CreateObj {
-    taskId: Types.ObjectId;
-    projectId: Types.ObjectId;
-    authorId: Types.ObjectId;
+    taskId: string;
+    projectId: string;
+    authorId: string;
     body: string;
   }
 

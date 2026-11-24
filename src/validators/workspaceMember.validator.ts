@@ -1,9 +1,8 @@
-import mongoose from "mongoose";
 import { z } from "zod";
 
 export const workspaceMemberParamsSchema = z.object({
-  workspaceId: z.string().refine(mongoose.isValidObjectId, { message: "Invalid workspace ID" }),
-  userId: z.string().refine(mongoose.isValidObjectId, { message: "Invalid user ID" }),
+  workspaceId: z.uuid({ error: "Invalid workspace ID" }),
+  userId: z.uuid({ error: "Invalid user ID" }),
 });
 
 export const addWorkspaceMemberSchema = z

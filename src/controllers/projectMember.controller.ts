@@ -2,7 +2,6 @@ import type { Request, Response } from "express";
 import { projectMemberRepository } from "../repositories/projectMember.repository";
 import { AppError } from "../utils/appError";
 import type { MemberRole } from "../models/enums";
-import { Types } from "mongoose";
 import { sendInviteEmail } from "../services/email.service";
 import { redisCacheService } from "../services/redisCache.service";
 
@@ -16,7 +15,7 @@ export const add = async (req: Request, res: Response) => {
 
   const result = await projectMemberRepository.addMember(
     req.projectId!,
-    req.user!._id,
+    req.user!.id,
     email,
     role,
   );
@@ -65,14 +64,15 @@ export const updateRole = async (req: Request, res: Response) => {
 // admin can remove anyone, any member can remove themselves (leave)
 export const remove = async (req: Request, res: Response) => {
   const userId = req.params.userId as string;
-  const isSelf = new Types.ObjectId(userId).equals(req.user!._id);
+const isSelf = userId === req.user!.id;
+
 
   if (!isSelf && req.projectRole !== "admin") {
     throw new AppError(403, "FORBIDDEN", "You do not have permission to do this");
   }
 
   await projectMemberRepository.removeMember(req.projectId!, userId);
-  await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+  await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
   res.status(200).json({
     success: true,
     message: isSelf ? "You left the project" : "Member removed successfully",

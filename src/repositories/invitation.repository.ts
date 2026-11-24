@@ -1,57 +1,62 @@
-import type { Types } from "mongoose";
-import type { MemberRole } from "../models/enums";
-import { InvitationModel } from "../models/invitation.model";
-import { ProjectMemberModel } from "../models/projectMember.model";
+import {prisma} from '../config/db'
 import { AppError } from "../utils/appError";
+import type { MemberRole } from "../models/enums";
 
 class InvitationRepository {
-  public async listPending(projectId: Types.ObjectId) {
-    return InvitationModel.find({ projectId, status: "pending" })
-      .populate("invitedBy", "name email")
-      .sort({ createdAt: -1 })
-      .lean();
-  }
+  public async listPending(projectId: string) {
+    return prisma.invitation.findMany({where:{ projectId, status: "pending" },
+    include:{inviter:{select:{id:true,name:true,email:true}}},
+    orderBy:{createdAt:'desc'}
+  });
+}
 
   public async updateRole(
-    projectId: Types.ObjectId,
+    projectId: string,
     invitationId: string,
     role: MemberRole,
   ) {
-    const invitation = await InvitationModel.findOneAndUpdate(
-      { _id: invitationId, projectId, status: "pending" },
-      { $set: { role } },
-      { returnDocument: 'after' },
-    );
+    const invitation = await prisma.invitation.findFirst({
+      where:{id:invitationId,projectId,status:"pending"},
+    });
+
     if (!invitation) throw new AppError(404, "INVITATION_NOT_FOUND", "Invitation not found");
-    return invitation;
+    return prisma.invitation.update({
+      where: { id: invitation.id },
+      data: { role },
+    });
   }
 
-  public async revoke(projectId: Types.ObjectId, invitationId: string) {
-    const invitation = await InvitationModel.findOneAndUpdate(
-      { _id: invitationId, projectId, status: "pending" },
-      { $set: { status: "revoked" } },
-      { returnDocument: 'after' },
-    );
+  public async revoke(projectId: string, invitationId: string) {
+    const invitation = await prisma.invitation.findFirst({
+      where: { id: invitationId, projectId, status: "pending" },
+    });
     if (!invitation) throw new AppError(404, "INVITATION_NOT_FOUND", "Invitation not found");
-    return invitation;
+
+    return prisma.invitation.update({
+      where: { id: invitation.id },
+      data: { status: "revoked" },
+    });
   }
 
   // called from /auth/sync: turn every pending invitation for this email into a membership
-  public async acceptAllForUser(userId: Types.ObjectId, email: string) {
-    const pending = await InvitationModel.find({ email, status: "pending" });
+  public async acceptAllForUser(userId: string, email: string) {
+    const pending = await prisma.invitation.findMany({
+      where: { email, status: "pending" },
+    });
     if (!pending.length) return [];
 
     for (const invitation of pending) {
       // skip if already a member, but still close the invitation
-      await ProjectMemberModel.updateOne(
-        { projectId: invitation.projectId, userId },
-        { $setOnInsert: { role: invitation.role } },
-        { upsert: true },
-      );
+      await prisma.projectMember.upsert({
+        where: { projectId_userId: { projectId: invitation.projectId, userId } },
+        create: { projectId: invitation.projectId, userId, role: invitation.role },
+        update: {},
+      });
 
-      invitation.status = "accepted";
-      invitation.acceptedAt = new Date();
-      await invitation.save();
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: "accepted", acceptedAt: new Date() },
+      });
     }
     return pending.map((invitation) => invitation.projectId);
   }

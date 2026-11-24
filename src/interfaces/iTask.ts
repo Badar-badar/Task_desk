@@ -1,32 +1,28 @@
-
-import { Types } from "mongoose";
 import { TaskPriority, TaskStatus } from "../models/enums";
 
 export namespace ITask {
   export interface Attachment {
-    _id: Types.ObjectId;
+    id: string;
     key: string;
     fileName: string;
     mimeType: string;
     size: number;
   }
 
-  export type NewAttachment = Omit<Attachment, "_id">;
-
   export interface Model {
-    _id: Types.ObjectId;
-    workspaceId: Types.ObjectId;
-    projectId: Types.ObjectId;
-    projectIds?: Types.ObjectId[];
+    id: string;
+    workspaceId: string;
+    projectId: string;
+    projectIds?: string[];
     title: string;
-    description?: string;
+    description?: string | null;
     status: TaskStatus;
     priority: TaskPriority;
-    assigneeId?: Types.ObjectId | null;
+    assigneeId?: string | null;
     dueDate?: Date | null;
     completedAt?: Date | null;
     attachments: Attachment[];
-    createdBy: Types.ObjectId;
+    createdBy: string;
     deletedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -37,16 +33,16 @@ export namespace ITask {
     description?: string;
     status?: TaskStatus;
     priority?: TaskPriority;
-    assigneeId?: string | Types.ObjectId | null;
+    assigneeId?: string | null;
     dueDate?: Date | null;
   }
 
   export interface UpdateObj {
     title?: string;
-    description?: string;
+    description?: string | null;
     status?: TaskStatus;
     priority?: TaskPriority;
-    assigneeId?: string | Types.ObjectId | null;
+    assigneeId?: string | null;
     dueDate?: Date | null;
   }
 }

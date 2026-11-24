@@ -1,19 +1,18 @@
-import type { Types } from "mongoose";
 import type { ProjectRole } from "../models/enums";
 
 export namespace IProjectMember {
   export interface Model {
-    _id: Types.ObjectId;
-    projectId: Types.ObjectId;
-    userId: Types.ObjectId;
+    id: string;
+    projectId: string;
+    userId: string;
     role: ProjectRole;
     createdAt: Date;
     updatedAt: Date;
   }
 
   export interface CreateObj {
-    projectId: Types.ObjectId;
-    userId: Types.ObjectId;
+    projectId: string;
+    userId: string;
     role: ProjectRole;
   }
 

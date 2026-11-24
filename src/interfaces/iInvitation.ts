@@ -1,28 +1,27 @@
-import type { Types } from "mongoose";
 import type { InvitationStatus, MemberRole } from "../models/enums";
 
 export namespace IInvitation {
   export interface Model {
-    _id: Types.ObjectId;
-    projectId: Types.ObjectId;
+    id: string;
+    projectId: string;
     email: string;
     role: MemberRole;
     status: InvitationStatus;
-    invitedBy: Types.ObjectId;
-    acceptedAt?: Date;
+    invitedBy: string;
+    acceptedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }
 
   export interface CreateObj {
-    projectId: Types.ObjectId;
+    projectId: string;
     email: string;
     role: MemberRole;
-    invitedBy: Types.ObjectId;
+    invitedBy: string;
   }
 
   export interface UpdateObj {
-    role?: MemberRole;
-    status?: InvitationStatus;
+    role?: MemberRole | null;
+    status?: InvitationStatus | null;
   }
 }

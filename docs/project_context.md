@@ -2,33 +2,33 @@
 
 ## Overview
 
-Task Desk is a TypeScript REST API for collaborative workspaces, projects, tasks, comments, favorites, invitations, and task attachments. It uses Express 5, MongoDB through Mongoose, Firebase Authentication, Zod validation, and Cloudflare R2-compatible object storage via the AWS S3 SDK. Resend is used to deliver project invitation emails.
+Task Desk is a TypeScript REST API for collaborative workspaces, projects, tasks, comments, favorites, invitations, and task attachments. It uses Express 5, PostgreSQL through Prisma ORM 7, Firebase Authentication, Zod validation, and Cloudflare R2-compatible object storage via the AWS S3 SDK.
 
 ## Stack and commands
 
 - Node.js and TypeScript with strict compiler checking
 - Express 5 for HTTP routing and middleware
-- MongoDB and Mongoose for persistence
+- PostgreSQL and Prisma ORM 7 for persistence
 - Firebase Admin for verifying bearer tokens and Firebase client packages are also installed
 - Zod for request validation; Multer for multipart uploads
 - AWS SDK S3 client and presigner for attachment storage
 - Resend for invitation email delivery
 - `npm run dev` starts `src/server.ts` with `tsx watch`.
 - `npm run build` compiles TypeScript from `src/` into `dist/`.
-- `npm start` is configured in `package.json` to run `dist/server.ts`; verify this path if changing the build or start scripts because TypeScript compilation emits JavaScript.
+- `npm start` runs the compiled `dist/server.js` entry point.
 
 ## Application layout
 
 - `src/app.ts` configures Helmet, CORS, JSON parsing, API routes, and the shared error handler.
-- `src/server.ts` connects to MongoDB, starts the HTTP server, and closes the server and database on shutdown signals.
+- `src/server.ts` connects to PostgreSQL through Prisma, starts the HTTP server, and closes the server and database on shutdown signals.
 - `src/routes/` defines the API surface. `src/routes/index.ts` mounts routes beneath `/api/v1` and defines `GET /api/v1/health`.
 - `src/controllers/` handles HTTP requests and responses.
 - `src/services/` contains cross-resource and integration behavior, including email, storage, and task attachments.
 - `src/repositories/` contains database access and persistence operations.
-- `src/models/` defines Mongoose schemas and shared enums; `src/interfaces/` contains TypeScript domain interfaces.
+- `prisma/schema.prisma` defines the PostgreSQL data model; `src/models/` re-exports Prisma model types and shared enums; `src/interfaces/` contains TypeScript domain interfaces.
 - `src/middlewares/` includes authentication, resource access, validation, uploads, and error handling.
 - `src/validators/` contains Zod request schemas.
-- `src/config/` initializes MongoDB, Firebase, and S3-compatible storage clients.
+- `src/config/` initializes Prisma, Firebase, and S3-compatible storage clients.
 - `docs/` contains project context and structure guidance; root `API.md` documents endpoint behavior; `postman/` contains Postman collections.
 
 ## Request and access flow

@@ -1,11 +1,17 @@
-import { Types } from "mongoose";
-import { ITask } from "../interfaces/iTask";
+import { randomUUID } from "crypto";
+import type { ITask } from "../interfaces/iTask";
 import { taskRepository } from "../repositories/task.repository";
 import { AppError } from "../utils/appError";
 import { deleteFile, uploadFile } from "./storage.service";
 
+// what uploadFile returns, before we give it an id
+type UploadedFile = Omit<ITask.Attachment, "id">;
+
+const readAttachments = (value: unknown): ITask.Attachment[] =>
+  Array.isArray(value) ? (value as ITask.Attachment[]) : [];
+
 async function cleanupUploadedFiles(
-  attachments: ITask.NewAttachment[],
+  attachments: { key: string }[],
   originalError: unknown,
 ): Promise<never> {
   const cleanupErrors: unknown[] = [];
@@ -29,17 +35,19 @@ async function cleanupUploadedFiles(
 }
 
 async function uploadTaskFiles(
-  workspaceId: Types.ObjectId,
+  workspaceId: string,
   taskId: string,
   files: Express.Multer.File[],
-): Promise<ITask.NewAttachment[]> {
-  const uploaded: ITask.NewAttachment[] = [];
+): Promise<ITask.Attachment[]> {
+  const uploaded: ITask.Attachment[] = [];
 
   try {
     for (const file of files) {
-      uploaded.push(
-        await uploadFile(file, `workspaces/${workspaceId}/tasks/${taskId}`),
+      const result: UploadedFile = await uploadFile(
+        file,
+        `workspaces/${workspaceId}/tasks/${taskId}`,
       );
+      uploaded.push({ id: randomUUID(), ...result });
     }
   } catch (error) {
     return cleanupUploadedFiles(uploaded, error);
@@ -49,7 +57,7 @@ async function uploadTaskFiles(
 }
 
 export async function addTaskAttachments(
-  workspaceId: Types.ObjectId,
+  workspaceId: string,
   taskId: string,
   files: Express.Multer.File[],
 ) {
@@ -64,7 +72,7 @@ export async function addTaskAttachments(
 }
 
 export async function updateTaskWithAttachments(
-  workspaceId: Types.ObjectId,
+  workspaceId: string,
   taskId: string,
   input: ITask.UpdateObj,
   files: Express.Multer.File[],
@@ -83,24 +91,21 @@ export async function updateTaskWithAttachments(
   }
 }
 
-export async function deleteTaskWithAttachments(
-  workspaceId: Types.ObjectId,
-  taskId: string,
-) {
+export async function deleteTaskWithAttachments(workspaceId: string, taskId: string) {
   const task = await taskRepository.getTask(workspaceId, taskId);
-  for (const attachment of task.attachments) {
+  for (const attachment of readAttachments(task.attachments)) {
     await deleteFile(attachment.key);
   }
   return taskRepository.deleteTask(workspaceId, taskId);
 }
 
 export async function deleteTaskAttachment(
-  workspaceId: Types.ObjectId,
+  workspaceId: string,
   taskId: string,
   attachmentId: string,
 ) {
   const task = await taskRepository.getTask(workspaceId, taskId);
-  const attachment = task.attachments.find((item) => item._id.toString() === attachmentId);
+  const attachment = readAttachments(task.attachments).find((item) => item.id === attachmentId);
   if (!attachment) {
     throw new AppError(404, "ATTACHMENT_NOT_FOUND", "Attachment not found");
   }

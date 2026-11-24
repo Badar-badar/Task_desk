@@ -15,7 +15,7 @@ export const add = async (req: Request, res: Response) => {
 // owner removes anyone, a member can remove themselves (leave)
 export const remove = async (req: Request, res: Response) => {
   const userId = req.params.userId as string;
-  const isSelf = userId === req.user!._id.toString();
+  const isSelf = userId === req.user!.id;
 
   if (!isSelf && req.workspaceRole !== "owner") {
     throw new AppError(403, "FORBIDDEN", "You do not have permission to do this");

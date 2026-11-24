@@ -1,11 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import type { RequestHandler } from "express";
-import { Types, type HydratedDocument } from "mongoose";
-import { ITask } from "../interfaces/iTask";
+import type { ITask } from "../interfaces/iTask";
+import { prisma } from "../config/db";
 import { taskRepository } from "../repositories/task.repository";
 import { projectRepository } from "../repositories/project.repository";
-import { ProjectMemberModel } from "../models/projectMember.model";
-import { ProjectModel } from "../models/project.model";
 import {
   addTaskAttachments as uploadTaskAttachments,
   deleteTaskAttachment as removeTaskAttachment,
@@ -16,18 +14,20 @@ import { getFileUrl } from "../services/storage.service";
 import { AppError } from "../utils/appError";
 import { redisCacheService } from "../services/redisCache.service";
 
-const serializeTask = async (task: HydratedDocument<ITask.Model>) => {
-  const data = task.toObject();
+type TaskLike = { projectId: string; projectIds?: string[]; attachments: unknown };
+
+const serializeTask = async <T extends TaskLike>(task: T) => {
+  const list = Array.isArray(task.attachments) ? (task.attachments as ITask.Attachment[]) : [];
   const attachments = await Promise.all(
-    (data.attachments ?? []).map(async (attachment) => ({
+    list.map(async (attachment) => ({
       ...attachment,
       url: await getFileUrl(attachment.key),
     })),
   );
 
   return {
-    ...data,
-    projectIds: [...new Set([data.projectId.toString(), ...(data.projectIds ?? []).map((id) => id.toString())])],
+    ...task,
+    projectIds: [...new Set([task.projectId, ...(task.projectIds ?? [])])],
     attachments,
   };
 };
@@ -38,8 +38,10 @@ const getParamString = (value: string | string[] | undefined): string => {
 };
 
 // assignee must belong to the project
-const assertProjectMember = async (projectId: Types.ObjectId | string, userId: string) => {
-  const member = await ProjectMemberModel.exists({ projectId, userId });
+const assertProjectMember = async (projectId: string, userId: string) => {
+  const member = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+  });
   if (!member) {
     throw new AppError(400, "VALIDATION_ERROR", "Assignee must be a member of this project");
   }
@@ -66,16 +68,16 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
     const files = Array.isArray(req.files) ? req.files : [];
     const body = req.body as ITask.CreateObj;
 
-    if (body.assigneeId) await assertProjectMember(projectId, body.assigneeId.toString());
+    if (body.assigneeId) await assertProjectMember(projectId, body.assigneeId);
 
-    let task = await taskRepository.createTask(projectId, req.user!._id, body);
+    let task = await taskRepository.createTask(projectId, req.user!.id, body);
 
     if (files.length) {
       try {
-        task = await uploadTaskAttachments(req.workspaceId!, task._id.toString(), files);
+        task = await uploadTaskAttachments(req.workspaceId!, task.id, files);
       } catch (error) {
         try {
-          await taskRepository.deleteTask(req.workspaceId!, task._id.toString());
+          await taskRepository.deleteTask(req.workspaceId!, task.id);
         } catch (rollbackError) {
           throw new AggregateError(
             [error, rollbackError],
@@ -86,7 +88,7 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
       }
     }
 
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
 
     res.status(201).json({
       success: true,
@@ -100,9 +102,9 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
 
 export const listTasks = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const workspaceId = req.workspaceId!.toString();
-    const userId = req.user!._id.toString();
-    const scope = `project:${req.projectId!.toString()}`;
+    const workspaceId = req.workspaceId!;
+    const userId = req.user!.id;
+    const scope = `project:${req.projectId!}`;
     const key = redisCacheService.taskListKey(workspaceId, userId, scope);
     const cached = await redisCacheService.get<unknown[]>(key);
     if (cached) {
@@ -132,11 +134,7 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
       assigneeId: query.assigneeId ?? null,
       status: query.status ?? null,
     })}`;
-    const cacheKey = redisCacheService.taskListKey(
-      req.workspaceId!.toString(),
-      req.user!._id.toString(),
-      scope,
-    );
+    const cacheKey = redisCacheService.taskListKey(req.workspaceId!, req.user!.id, scope);
     const cached = await redisCacheService.get<unknown[]>(cacheKey);
     if (cached) {
       res.status(200).json({ success: true, data: cached });
@@ -144,16 +142,16 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
     }
 
     // only projects in the active workspace where I am a member
-    let projectIds = await projectRepository.getMyProjectIds(req.workspaceId!, req.user!._id);
+    let projectIds = await projectRepository.getMyProjectIds(req.workspaceId!, req.user!.id);
 
     if (query.projectId) {
-      projectIds = projectIds.filter((id) => id.toString() === query.projectId);
+      projectIds = projectIds.filter((id) => id === query.projectId);
     }
 
     const tasks = projectIds.length
       ? await taskRepository.listTasksByProjects(projectIds, {
           ...(query.assigneeId
-            ? { assigneeId: query.assigneeId === "me" ? req.user!._id : new Types.ObjectId(query.assigneeId) }
+            ? { assigneeId: query.assigneeId === "me" ? req.user!.id : query.assigneeId }
             : {}),
           ...(query.status ? { status: query.status } : {}),
         })
@@ -169,30 +167,48 @@ export const listMyTasks = async (req: Request, res: Response, next: NextFunctio
 
 export const addTaskProject = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = new Types.ObjectId((req.body as { projectId: string }).projectId);
-    const project = await ProjectModel.findOne({ _id: projectId, workspaceId: req.workspaceId }).select("_id");
-    if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found in this workspace");
-    const membership = await ProjectMemberModel.findOne({ projectId, userId: req.user!._id }).lean();
-    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
-    if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to add tasks to this project");
+    const projectId = (req.body as { projectId: string }).projectId;
 
-    const task = await taskRepository.addProjectLink(req.task!, projectId);
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: req.workspaceId },
+      select: { id: true },
+    });
+    if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found in this workspace");
+
+    const membership = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: req.user!.id } },
+    });
+    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    if (!["admin", "editor"].includes(membership.role)) {
+      throw new AppError(403, "FORBIDDEN", "You need editor access to add tasks to this project");
+    }
+
+    const task = await taskRepository.addProjectLink(req.task!.id, projectId);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
     res.status(200).json({ success: true, data: await serializeTask(task) });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const removeTaskProject = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = new Types.ObjectId(getParamString(req.params.projectId));
-    const membership = await ProjectMemberModel.findOne({ projectId, userId: req.user!._id }).lean();
-    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
-    if (!["admin", "editor"].includes(membership.role)) throw new AppError(403, "FORBIDDEN", "You need editor access to remove tasks from this project");
+    const projectId = getParamString(req.params.projectId);
 
-    const task = await taskRepository.removeProjectLink(req.task!, projectId);
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    const membership = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: req.user!.id } },
+    });
+    if (!membership) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    if (!["admin", "editor"].includes(membership.role)) {
+      throw new AppError(403, "FORBIDDEN", "You need editor access to remove tasks from this project");
+    }
+
+    const task = await taskRepository.removeProjectLink(req.task!.id, projectId);
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
     res.status(200).json({ success: true, data: await serializeTask(task) });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const getTask = async (req: Request, res: Response, next: NextFunction) => {
@@ -215,11 +231,11 @@ export const updateTask = async (req: Request, res: Response, next: NextFunction
     }
 
     if (updates.assigneeId) {
-      await assertProjectMember(req.projectId!, updates.assigneeId.toString());
+      await assertProjectMember(req.projectId!, updates.assigneeId);
     }
 
     const task = await updateTaskWithAttachments(req.workspaceId!, taskId, updates, files);
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
 
     res.status(200).json({
       success: true,
@@ -239,7 +255,7 @@ export const addTaskAttachments = async (req: Request, res: Response, next: Next
       throw new AppError(400, "NO_FILES", "Select at least one file to upload");
     }
     const task = await uploadTaskAttachments(req.workspaceId!, taskId, files);
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
 
     res.status(201).json({
       success: true,
@@ -256,7 +272,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
     const taskId = getParamString(req.params.taskId);
     const attachmentId = getParamString(req.params.attachmentId);
     const task = await removeTaskAttachment(req.workspaceId!, taskId, attachmentId);
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
 
     res.status(200).json({
       success: true,
@@ -271,7 +287,7 @@ export const deleteTaskAttachment = async (req: Request, res: Response, next: Ne
 export const deleteTask = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await deleteTaskWithAttachments(req.workspaceId!, getParamString(req.params.taskId));
-    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!.toString());
+    await redisCacheService.invalidateWorkspaceLists(req.workspaceId!);
 
     res.status(200).json({ success: true, message: "Task deleted successfully" });
   } catch (error) {

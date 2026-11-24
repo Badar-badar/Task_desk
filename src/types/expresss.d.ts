@@ -1,29 +1,22 @@
 import type { DecodedIdToken } from "firebase-admin/auth";
-import type { HydratedDocument, Types } from "mongoose";
-import type { IComment } from "../interfaces/iComment";
-import type { IWorkspace } from "../interfaces/iWorkspace";
-import type { ITask } from "../interfaces/iTask";
+import type { Comment, Task, User, Workspace } from "../generated/prisma/client";
 import type { WorkspaceRole, MemberRole } from "../models/enums";
-import type { IUser } from "../models/user.model";
 
-type AuthenticatedUser = HydratedDocument<IUser & {
-  workspaceId?: Types.ObjectId | null;
-  role?: WorkspaceRole | null;
-}>;
+type TaskWithProjectIds = Task & { projectIds: string[] };
 
 declare global {
   namespace Express {
     interface Request {
       firebaseUser?: DecodedIdToken;
-      user?: AuthenticatedUser;
-      workspace?: HydratedDocument<IWorkspace.PersistenceModel>;
-      workspaceId?: Types.ObjectId;
+      user?: User;
+      workspace?: Workspace;
+      workspaceId?: string;
       workspaceRole?: WorkspaceRole;
       workspaceProjectScoped?: boolean;
-      projectId?: Types.ObjectId;
+      projectId?: string;
       projectRole?: MemberRole;
-      task?: HydratedDocument<ITask.Model>;
-      comment?: HydratedDocument<IComment.Model>;
+      task?: TaskWithProjectIds;
+      comment?: Comment;
     }
   }
 }

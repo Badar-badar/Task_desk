@@ -1,5 +1,4 @@
 import type { RequestHandler } from "express";
-import mongoose from "mongoose";
 import { z } from "zod";
 import { AppError } from "../utils/appError";
 import { PROJECT_STATUSES, PROJECT_COLORS } from "../models/enums";
@@ -25,9 +24,7 @@ export const updateProjectSchema = z.object({
 });
 
 export const projectIdSchema = z.object({
-  projectId: z.string().refine(mongoose.isValidObjectId, {
-    message: "Invalid projectId",
-  }),
+  projectId: z.uuid({ error: "Invalid project ID" }),
 });
 
 const validateBody = (schema: z.ZodType): RequestHandler => {

@@ -1,16 +1,15 @@
-import type { Types } from "mongoose";
 
 export namespace IFavorite {
   export interface Model {
-    _id: Types.ObjectId;
-    userId: Types.ObjectId;
-    projectId: Types.ObjectId;
+    id: string;
+    userId: string;
+    projectId: string;
     createdAt: Date;
     updatedAt: Date;
   }
 
   export interface CreateObj {
-    userId: Types.ObjectId;
-    projectId: Types.ObjectId;
+    userId: string;
+    projectId: string;
   }
 }

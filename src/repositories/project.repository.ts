@@ -1,195 +1,204 @@
-import type { Types } from "mongoose";
 import type { IProject } from "../interfaces/iProject";
-import type { MemberRole } from "../models/enums";
-import { ProjectModel } from "../models/project.model";
-import { ProjectMemberModel } from "../models/projectMember.model";
-import { InvitationModel } from "../models/invitation.model";
-import { FavoriteModel } from "../models/favourite";
-import { CommentModel } from "../models/comment.model";
-import { TaskModel } from "../models/task.model";
+import { prisma } from "../config/db";
 import { taskRepository } from "./task.repository";
 import { AppError } from "../utils/appError";
 import { favoriteRepository } from "./favourite.repository";
+import { PROJECT_COLORS, type MemberRole } from "../models/enums";
+
+type MemberPreview = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  role: MemberRole;
+};
+
+const ownerSelect = { select: { id: true, name: true, email: true, avatarUrl: true } };
 
 class ProjectRepository {
-  public async createProject(
-  workspaceId: Types.ObjectId,
-  userId: Types.ObjectId,
-  data: IProject.CreateObj,
-) {
-  const { dueDate, ...rest } = data;
-  const project = await ProjectModel.create({
-    ...rest,
-    ...(dueDate !== undefined ? { endDate: dueDate } : {}),
-    workspaceId,
-    ownerId: userId,
-  });
+  public async createProject(workspaceId: string, userId: string, data: IProject.CreateObj) {
+    const { dueDate, ...rest } = data;
 
-    try {
-      await ProjectMemberModel.create({
-        projectId: project._id,
-        userId,
-        role: "admin",
-      });
-    } catch (error) {
-      await ProjectModel.deleteOne({ _id: project._id }); // roll back
-      throw error;
-    }
+    // Pick a color here because Prisma does not define an application-level default.
+    const color = rest.color ?? PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)];
 
-    return { ...project.toObject(), role: "admin" as MemberRole };
+    // project + admin member are created together, if one fails both are cancelled
+    const project = await prisma.project.create({
+      data: {
+        ...rest,
+        color,
+        endDate: dueDate,
+        workspaceId,
+        ownerId: userId,
+        members: { create: { userId, role: "admin" } },
+      },
+    });
+
+    return { ...project, role: "admin" as MemberRole };
   }
 
   // projects where the user is a member
-public async listProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
-  const memberships = await ProjectMemberModel.find({ userId }).lean();
-  if (!memberships.length) return [];
+  public async listProjects(workspaceId: string, userId: string) {
+    const memberships = await prisma.projectMember.findMany({
+      where: { userId, project: { workspaceId } },
+      select: { projectId: true, role: true },
+    });
+    if (!memberships.length) return [];
 
-  const roleByProject = new Map(memberships.map((m) => [m.projectId.toString(), m.role]));
-  const projects = await ProjectModel.find({
-    workspaceId,                                             
-    _id: { $in: memberships.map((m) => m.projectId) },
-  }).sort({ createdAt: -1 }).populate("ownerId", "name email avatarUrl").lean();
+    const roleByProject = new Map(memberships.map((m) => [m.projectId, m.role]));
+    const projects = await prisma.project.findMany({
+      where: { workspaceId, id: { in: memberships.map((m) => m.projectId) } },
+      orderBy: { createdAt: "desc" },
+      include: { owner: ownerSelect },
+    });
 
     const withStats = await this.addTaskStats(projects);
     const withMembers = await this.addMembersPreview(withStats);
 
-      const favoriteIds = await favoriteRepository.getFavoriteIds(
+    const favoriteIds = await favoriteRepository.getFavoriteIds(
       userId,
-      projects.map((p) => p._id),
+      projects.map((p) => p.id),
     );
     return withMembers.map((project) => ({
       ...project,
-      role: roleByProject.get(project._id.toString())!,
-      isFavorite: favoriteIds.has(project._id.toString()),
+      role: roleByProject.get(project.id)!,
+      isFavorite: favoriteIds.has(project.id),
     }));
   }
 
-  
-  public async getProject(projectId: Types.ObjectId, role: MemberRole, userId: Types.ObjectId) {
-    const project = await ProjectModel.findById(projectId).populate("ownerId", "name email avatarUrl").lean();
+  public async getProject(projectId: string, role: MemberRole, userId: string) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { owner: ownerSelect },
+    });
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
 
     const [withStats] = await this.addTaskStats([project]);
     const [withMembers] = await this.addMembersPreview([withStats]);
-  const favoriteIds = await favoriteRepository.getFavoriteIds(userId, [projectId]);
-  return { ...withMembers, role, isFavorite: favoriteIds.has(projectId.toString()) };
+    const favoriteIds = await favoriteRepository.getFavoriteIds(userId, [projectId]);
+    return { ...withMembers, role, isFavorite: favoriteIds.has(projectId) };
   }
 
-  public async countProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
-  const memberships = await ProjectMemberModel.find({ userId }).select("projectId").lean();
-  return ProjectModel.countDocuments({
-    workspaceId,
-    _id: { $in: memberships.map((m) => m.projectId) },
-  });
-}
-
-  public async getRecentProjects(workspaceId: Types.ObjectId, userId: Types.ObjectId, limit: number) {
-  const memberships = await ProjectMemberModel.find({ userId }).select("projectId").lean();
-  const projects = await ProjectModel.find({
-    workspaceId,
-    _id: { $in: memberships.map((m) => m.projectId) },
-  }).sort({ createdAt: -1 }).limit(limit).lean();
-  return this.addTaskStats(projects);
-}
-
-public async getMyProjectIds(workspaceId: Types.ObjectId, userId: Types.ObjectId) {
-  const memberships = await ProjectMemberModel.find({ userId }).select("projectId").lean();
-  const projects = await ProjectModel.find({
-    workspaceId,
-    _id: { $in: memberships.map((m) => m.projectId) },
-  })
-    .select("_id")
-    .lean();
-
-  return projects.map((p) => p._id);
-}
-
-  public async getProjectNames(_workspaceId: Types.ObjectId, projectIds: Types.ObjectId[]) {
-    const projects = await ProjectModel.find({ _id: { $in: projectIds } })
-      .select("_id name")
-      .lean();
-    return new Map(projects.map((project) => [project._id.toString(), project.name]));
+  public async countProjects(workspaceId: string, userId: string) {
+    return prisma.project.count({
+      where: { workspaceId, members: { some: { userId } } },
+    });
   }
 
-  private async addTaskStats<T extends { _id: Types.ObjectId }>(projects: T[]) {
-    if (!projects.length) {
-      return projects.map((project) => ({ ...project, taskStats: { total: 0, done: 0 } }));
+  public async getRecentProjects(workspaceId: string, userId: string, limit: number) {
+    const projects = await prisma.project.findMany({
+      where: { workspaceId, members: { some: { userId } } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return this.addTaskStats(projects);
+  }
+
+  public async getMyProjectIds(workspaceId: string, userId: string) {
+    const projects = await prisma.project.findMany({
+      where: { workspaceId, members: { some: { userId } } },
+      select: { id: true },
+    });
+    return projects.map((p) => p.id);
+  }
+
+  public async getProjectNames(_workspaceId: string, projectIds: string[]) {
+    const projects = await prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, name: true },
+    });
+    return new Map(projects.map((project) => [project.id, project.name]));
+  }
+
+  // counts tasks per project (a task counts for its main project and any linked project)
+  private async addTaskStats<T extends { id: string }>(projects: T[]) {
+    const ids = new Set(projects.map((p) => p.id));
+    const stats = new Map<string, { total: number; done: number }>();
+
+    if (ids.size) {
+      const tasks = await prisma.task.findMany({
+        where: {
+          deletedAt: null,
+          OR: [
+            { projectId: { in: [...ids] } },
+            { projects: { some: { id: { in: [...ids] } } } },
+          ],
+        },
+        select: { status: true, projectId: true, projects: { select: { id: true } } },
+      });
+
+      for (const task of tasks) {
+        const refs = new Set([task.projectId, ...task.projects.map((p) => p.id)]);
+        for (const ref of refs) {
+          if (!ids.has(ref)) continue;
+          const current = stats.get(ref) ?? { total: 0, done: 0 };
+          current.total += 1;
+          if (task.status === "done") current.done += 1;
+          stats.set(ref, current);
+        }
+      }
     }
-
-    const stats = await TaskModel.aggregate<{ _id: Types.ObjectId; total: number; done: number }>([
-      { $match: { $or: [{ projectId: { $in: projects.map((project) => project._id) } }, { projectIds: { $in: projects.map((project) => project._id) } }], deletedAt: null } },
-      { $project: { status: 1, projectRefs: { $setUnion: [["$projectId"], { $ifNull: ["$projectIds", []] }] } } },
-      { $unwind: "$projectRefs" },
-      { $match: { projectRefs: { $in: projects.map((project) => project._id) } } },
-      { $group: { _id: "$projectRefs", total: { $sum: 1 }, done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } } } },
-    ]);
-    const statsByProject = new Map(stats.map(({ _id, total, done }) => [_id.toString(), { total, done }]));
 
     return projects.map((project) => ({
       ...project,
-      taskStats: statsByProject.get(project._id.toString()) ?? { total: 0, done: 0 },
+      taskStats: stats.get(project.id) ?? { total: 0, done: 0 },
     }));
   }
 
-  
-  private async addMembersPreview<T extends { _id: Types.ObjectId }>(projects: T[]) {
-    if (!projects.length) return projects.map((p) => ({ ...p, members: [], memberCount: 0 }));
+  private async addMembersPreview<T extends { id: string }>(projects: T[]) {
+    if (!projects.length) {
+      return projects.map((p) => ({ ...p, members: [] as MemberPreview[], memberCount: 0 }));
+    }
 
-    const rows = await ProjectMemberModel.find({
-      projectId: { $in: projects.map((p) => p._id) },
-    })
-      .populate("userId", "name email avatarUrl")
-      .lean();
+    const rows = await prisma.projectMember.findMany({
+      where: { projectId: { in: projects.map((p) => p.id) } },
+      orderBy: { createdAt: "asc" },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
 
-    const byProject = new Map<string, any[]>();
-    for (const row of rows as any[]) {
-      const key = row.projectId.toString();
-      const list = byProject.get(key) ?? [];
+    const byProject = new Map<string, MemberPreview[]>();
+    for (const row of rows) {
+      const list = byProject.get(row.projectId) ?? [];
       list.push({
-        _id: row.userId?._id,
-        name: row.userId?.name,
-        avatarUrl: row.userId?.avatarUrl,
+        id: row.user.id,
+        name: row.user.name,
+        avatarUrl: row.user.avatarUrl,
         role: row.role,
       });
-      byProject.set(key, list);
+      byProject.set(row.projectId, list);
     }
 
     return projects.map((project) => {
-      const all = byProject.get(project._id.toString()) ?? [];
+      const all = byProject.get(project.id) ?? [];
       return { ...project, members: all.slice(0, 3), memberCount: all.length };
     });
   }
 
-  public async updateProject(projectId: Types.ObjectId, data: IProject.UpdateObj) {
+  public async updateProject(projectId: string, data: IProject.UpdateObj) {
     const { dueDate, ...rest } = data;
-    const changes = {
-      ...rest,
-      ...(dueDate !== undefined ? { endDate: dueDate } : {}),
-    };
 
-    const project = await ProjectModel.findByIdAndUpdate(
-      projectId,
-      { $set: changes },
-      { returnDocument: 'after', runValidators: true },
-    );
-    if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
-
-    return project;
+    try {
+      return await prisma.project.update({
+        where: { id: projectId },
+        data: { ...rest, endDate: dueDate },
+      });
+    } catch (error) {
+      // P2025 = record not found
+      if ((error as { code?: string }).code === "P2025") {
+        throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+      }
+      throw error;
+    }
   }
 
-  public async deleteProject(projectId: Types.ObjectId) {
-    const project = await ProjectModel.findById(projectId);
+  public async deleteProject(projectId: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
 
-    const tasks = await taskRepository.softDeleteProjectTasks(project._id);
+    const tasks = await taskRepository.softDeleteProjectTasks(project.id);
 
-    await Promise.all([
-      tasks.length ? CommentModel.deleteMany({ taskId: { $in: tasks.map((task) => task._id) } }) : Promise.resolve(),
-      InvitationModel.deleteMany({ projectId: project._id }),
-      FavoriteModel.deleteMany({ projectId: project._id }),
-      ProjectMemberModel.deleteMany({ projectId: project._id }),
-    ]);
-    await ProjectModel.deleteOne({ _id: project._id });
+    // members, comments, favorites and invitations are removed automatically
+    // because the schema has onDelete: Cascade on them
+    await prisma.project.delete({ where: { id: project.id } });
 
     return { project, tasks };
   }

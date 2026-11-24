@@ -1,46 +1,51 @@
-import type { Types } from "mongoose";
-import { CommentModel } from "../models/comment.model";
 import { AppError } from "../utils/appError";
+import {prisma} from '../config/db'
 
 class CommentRepository {
-  public async listByTask(taskId: Types.ObjectId) {
-    return CommentModel.find({ taskId, deletedAt: null })
-      .populate("authorId", "name avatarUrl")
-      .sort({ createdAt: 1 })
-      .lean();
+  public async listByTask(taskId: string) {
+    return prisma.comment.findMany({
+       where:{ taskId, deletedAt: null },
+       include:{author: {select:{id:true,name:true,avatarUrl:true}}},
+       orderBy:{createdAt:'asc'}
+      });
+
   }
 
   public async create(data: {
-    taskId: Types.ObjectId;
-    projectId: Types.ObjectId;
-    authorId: Types.ObjectId;
+    taskId: string;
+    projectId: string;
+    authorId: string;
     body: string;
   }) {
-    const comment = await CommentModel.create(data);
-    return comment.populate("authorId", "name avatarUrl");
+    const comment = await prisma.comment.create({data, include:{author:{select:{id:true,name:true,avatarUrl:true}}}});
+    return comment;
   }
 
   public async getComment(commentId: string) {
-    const comment = await CommentModel.findOne({ _id: commentId, deletedAt: null });
+    const comment = await prisma.comment.findFirst({where:{ id: commentId, deletedAt: null }});
     if (!comment) throw new AppError(404, "COMMENT_NOT_FOUND", "Comment not found");
     return comment;
   }
 
-  public async updateBody(comment: InstanceType<typeof CommentModel>, body: string) {
-    comment.body = body;
-    await comment.save();
-    return comment.populate("authorId", "name avatarUrl");
+  public async updateBody(commentId: string, body: string) {
+    return prisma.comment.update({
+      where:{id:commentId},
+      data:{body},
+      include:{author:{select:{id:true,name:true,avatarUrl:true}}}
+    })
   }
 
-  public async softDelete(commentId: Types.ObjectId) {
-    await CommentModel.updateOne({ _id: commentId }, { $set: { deletedAt: new Date() } });
+  public async softDelete(commentId: string) {
+    await prisma.comment.update({where:{ id:commentId}, data:{deletedAt:new Date()}});
   }
 
   // called when a task is deleted
-  public async softDeleteByTask(taskId: Types.ObjectId | string) {
-    await CommentModel.updateMany(
-      { taskId, deletedAt: null },
-      { $set: { deletedAt: new Date() } },
+  public async softDeleteByTask(taskId:string) {
+    await prisma.comment.updateMany(
+      {
+        where:{taskId,deletedAt:null},
+        data:{deletedAt:new Date()},
+      }
     );
   }
 }

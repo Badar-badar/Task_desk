@@ -1,14 +1,15 @@
 import type { Request, Response } from "express";
+import type { ITask } from "../interfaces/iTask";
 import { workspaceRepository } from "../repositories/workspace.repository";
 import { deleteFile } from "../services/storage.service";
 
 export const create = async (req: Request, res: Response) => {
-  const data = await workspaceRepository.createWorkspace(req.user!._id, req.body.name);
+  const data = await workspaceRepository.createWorkspace(req.user!.id, req.body.name);
   res.status(201).json({ success: true, data });
 };
 
 export const listMine = async (req: Request, res: Response) => {
-  const data = await workspaceRepository.listMine(req.user!._id);
+  const data = await workspaceRepository.listMine(req.user!.id);
   res.status(200).json({ success: true, data });
 };
 
@@ -25,7 +26,10 @@ export const update = async (req: Request, res: Response) => {
 export const remove = async (req: Request, res: Response) => {
   const { tasks } = await workspaceRepository.deleteWorkspace(req.workspaceId!);
   for (const task of tasks) {
-    for (const attachment of task.attachments) await deleteFile(attachment.key);
+    const attachments = Array.isArray(task.attachments)
+      ? (task.attachments as unknown as ITask.Attachment[])
+      : [];
+    for (const attachment of attachments) await deleteFile(attachment.key);
   }
   res.status(200).json({ success: true, message: "Workspace deleted successfully" });
 };

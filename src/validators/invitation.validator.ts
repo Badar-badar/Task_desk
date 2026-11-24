@@ -1,17 +1,15 @@
-import mongoose from "mongoose";
 import { z } from "zod";
 import { MEMBER_ROLES } from "../models/enums";
 
-const objectId = (label: string) =>
-  z.string().refine(mongoose.isValidObjectId, { message: `Invalid ${label}` });
+const uuid = (label: string) => z.uuid({ error: `Invalid ${label}` });
 
 export const projectInvitationsParamsSchema = z.object({
-  projectId: objectId("project ID"),
+  projectId: uuid("project ID"),
 });
 
 export const invitationParamsSchema = z.object({
-  projectId: objectId("project ID"),
-  invitationId: objectId("invitation ID"),
+  projectId: uuid("project ID"),
+  invitationId: uuid("invitation ID"),
 });
 
 export const updateInvitationSchema = z

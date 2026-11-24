@@ -1,5 +1,5 @@
 import {Router} from "express"
-import mongoose from 'mongoose'
+import { prisma } from "../config/db";
 import authRoutes from './auth.routes'
 import workspaceRoutes from './workspace.routes';
 import projectRoutes from './project.routes';
@@ -10,11 +10,18 @@ import { favoriteListRouter } from './favourite.routes'
 import workspaceMemberRouter from './workspaceMember.routes'
 const router = Router();
 
-router.get("/health",(_req,res)=>{
-    res.json({
-        status: 'ok',
+router.get("/health", async (_req, res) => {
+    let db: "connected" | "disconnected" = "connected";
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+    } catch {
+        db = "disconnected";
+    }
+
+    res.status(db === "connected" ? 200 : 503).json({
+        status: db === "connected" ? "ok" : "error",
         app: 'Task Desk',
-        db:mongoose.connection.readyState === 1 ? 'connected': 'disconnected',
+        db,
     });
 });
 
