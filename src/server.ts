@@ -4,8 +4,9 @@ const start = async() =>{
     try {
         await connectDB();
 
-        const server = app.listen(process.env.PORT, ()=>{
-        console.log(`server is running on http://localhost:${process.env.PORT}`);
+        const port = Number(process.env.PORT) || 3000;
+        const server = app.listen(port, ()=>{
+        console.log(`server is running on port ${port}`);
 
         const shutdown = async(signal: string):Promise<void> =>{
             console.log(`${signal} received. shutting down ...`);
