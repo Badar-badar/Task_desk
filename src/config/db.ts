@@ -11,7 +11,6 @@ if (!connectionString) {
 const adapter = new PrismaPg({
   connectionString,
 });
-    console.log("DB URL in use:", connectionString.replace(/:\/\/.*@/, "://***@"));
 
 
 export const prisma = new PrismaClient({ adapter });
