@@ -19,6 +19,7 @@ This reference documents the HTTP API implemented by the Express routes, validat
 ## Conventions
 
 - The server listens on `PORT`; health is `GET /api/v1/health`.
+- **CORS and browser permissions:** CORS middleware runs before API routes and allows the configured `CLIENT_URL` origin. The server strips trailing slashes from `CLIENT_URL`, so set it to the frontend origin such as `https://flowboard-1-lyb0dpoa.up.dockerploy.com` (scheme included, no path or trailing slash). Preflight `OPTIONS` requests are handled by the middleware; allowed methods are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS`, with `Authorization`, `Content-Type`, and `x-workspace-id` request headers. CORS only permits the browser to send/read cross-origin requests; it does not authenticate users or grant workspace/project permissions. Protected APIs still require the Firebase bearer token and the role/membership rules documented below.
 - Protected routes use `Authorization: Bearer <Firebase ID token>`. `authenticate` verifies the Firebase token, loads the local user (creating it through the same sync flow if it is missing), and requires `isActive`. The frontend may still call `POST /auth/sync` explicitly after login or signup.
 - Project and task routes also require `x-workspace-id: <workspace UUID>`. The user must be a member of that active workspace. `/workspace/:workspaceId/...` routes take the workspace ID in the path.
 - Project role is one of `admin`, `editor`, `commenter`, or `viewer`. Workspace role is `owner` or `member`. Task access generally follows the project role; the assigned user is additionally allowed to update only task status and to manage task attachments.
@@ -58,6 +59,30 @@ The server reads configuration from `.env` (never commit secret values):
 | `NODE_ENV` | Controls whether error responses include a stack (omitted only when exactly `production`) |
 
 Errors handled by the shared error middleware have shape `{ "success": false, "message": "...", "stack": "..." }`; `stack` is omitted only when `NODE_ENV` is exactly `production`. The internal `AppError.code` is not returned. Validation errors use `400`; authentication failures use `401`; authorization failures use `403`; inaccessible or absent resources generally use `404`; conflicts use `409`. Multer file-size failures are `413`, wrong upload field/count is `400`, unsupported file types are `415`. Unhandled exceptions return `500` with message `Internal server Error`. Express's default response is used for unmatched paths because the custom `notFound` handler is not mounted.
+
+### Browser preflight example
+
+For a frontend hosted at `https://flowboard-1-lyb0dpoa.up.dockerploy.com`, a browser preflight to `OPTIONS /api/v1/workspace` can be sent as:
+
+```http
+OPTIONS /api/v1/workspace HTTP/1.1
+Host: task-desk-wf1rankq.up.dockerploy.com
+Origin: https://flowboard-1-lyb0dpoa.up.dockerploy.com
+Access-Control-Request-Method: GET
+Access-Control-Request-Headers: authorization,content-type,x-workspace-id
+```
+
+Expected successful preflight headers (the exact allow-headers casing/order may vary):
+
+```http
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://flowboard-1-lyb0dpoa.up.dockerploy.com
+Access-Control-Allow-Methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
+Access-Control-Allow-Headers: authorization,content-type,x-workspace-id
+Vary: Origin
+```
+
+The `Access-Control-Allow-Origin` value must exactly match the request's `Origin`: include `https://` and omit the trailing slash. The preflight itself does not require a bearer token. The actual `GET /api/v1/workspace` is protected and requires `Authorization: Bearer <Firebase ID token>`; it returns that user's non-deleted workspaces. CORS permission is not API authorization.
 
 ## Health and authentication
 
