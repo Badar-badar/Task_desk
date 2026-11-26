@@ -10,8 +10,9 @@ if (!connectionString) {
 
 const adapter = new PrismaPg({
   connectionString,
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
+    console.log("DB URL in use:", connectionString.replace(/:\/\/.*@/, "://***@"));
+
 
 export const prisma = new PrismaClient({ adapter });
 
